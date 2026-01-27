@@ -1,0 +1,11 @@
+# 환경 변수 (절대 GitHub에 올리면 안됨!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
