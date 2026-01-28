@@ -568,63 +568,95 @@ body {
 }
 
 .week-timeline {
+    display: flex;
+    gap: 0;
     padding: 0;
 }
 
 .week-day {
-    border-bottom: 1px solid var(--border-color);
+    flex: 1 1 0;
+    min-width: 0;
+    border-right: 1px solid var(--border-color);
     transition: background-color 0.3s;
+    display: flex;
+    flex-direction: column;
 }
 
 .week-day:last-child {
-    border-bottom: none;
+    border-right: none;
+}
+
+.week-day.today {
+    background: rgba(88, 166, 255, 0.08);
+}
+
+[data-theme="light"] .week-day.today {
+    background: rgba(9, 105, 218, 0.08);
 }
 
 .week-day-header {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    padding: 12px 20px;
+    padding: 16px 12px;
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
-}
-
-.week-day-date {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
 
 .week-day-name {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
-    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.week-day-date {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.week-event-count {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    padding: 2px 8px;
+    border-radius: 10px;
 }
 
 .week-day-events {
-    padding: 8px 20px;
+    padding: 12px;
+    overflow-y: auto;
+    max-height: 600px;
 }
 
-.week-event-item {
-    display: grid;
-    grid-template-columns: 60px 24px 1fr 40px 50px 60px;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
+.week-event {
     background: var(--bg-tertiary);
-    border-radius: 6px;
-    margin-bottom: 6px;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
 }
 
-.week-event-item:hover {
+.week-event:hover {
     background: var(--bg-card);
+    transform: translateX(2px);
+    border-left-color: var(--accent-blue);
 }
 
 .week-event-time {
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    margin-bottom: 8px;
+    display: block;
 }
 
 .week-event-time.dawn {
@@ -639,27 +671,57 @@ body {
     color: var(--accent-cyan);
 }
 
+.week-event-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.week-event-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
 .week-event-emoji {
     font-size: 16px;
+    flex-shrink: 0;
 }
 
 .week-event-title {
     font-size: 13px;
     color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.4;
+    word-wrap: break-word;
+    flex: 1;
 }
 
-.week-event-markets {
-    font-size: 11px;
-    color: var(--text-secondary);
+.market-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-purple);
+    color: white;
+    font-size: 9px;
+    font-weight: 600;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.week-event-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
 }
 
 .week-event-prob {
     font-size: 14px;
     font-weight: 600;
-    text-align: right;
 }
 
 .week-event-prob.low {
@@ -673,11 +735,10 @@ body {
 .week-event-volume {
     font-size: 11px;
     color: var(--text-secondary);
-    text-align: right;
 }
 
-.week-day.empty {
-    padding: 20px;
+.week-no-events {
+    padding: 40px 20px;
     text-align: center;
     color: var(--text-muted);
     font-size: 13px;
@@ -734,19 +795,17 @@ body {
 }
 
 .calendar-overview-day {
-    min-height: 80px;
+    min-height: 120px;
     border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
     padding: 8px;
     background: var(--bg-secondary);
     position: relative;
-    cursor: pointer;
     transition: background-color 0.2s;
+    display: flex;
+    flex-direction: column;
 }
 
-.calendar-overview-day:hover {
-    background: var(--bg-card);
-}
 
 .calendar-overview-day:nth-child(7n) {
     border-right: none;
@@ -767,24 +826,67 @@ body {
     color: var(--text-muted);
 }
 
-.calendar-overview-dots {
+.calendar-overview-events {
     display: flex;
-    gap: 3px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 4px;
     margin-top: 6px;
 }
 
-.calendar-overview-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent-blue);
+.calendar-overview-event {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.2s;
 }
 
-.calendar-overview-count {
+.calendar-overview-event:hover {
+    background: var(--bg-card);
+}
+
+.overview-event-emoji {
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.overview-event-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-size: 10px;
+}
+
+.overview-event-prob {
     font-size: 11px;
-    color: var(--text-secondary);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.overview-event-prob.low {
+    color: var(--accent-red);
+}
+
+.overview-event-prob.mid {
+    color: var(--accent-yellow);
+}
+
+.calendar-overview-more-link {
+    font-size: 10px;
+    color: var(--accent-blue);
+    cursor: pointer;
     margin-top: 4px;
+    padding: 2px 4px;
+}
+
+.calendar-overview-more-link:hover {
+    text-decoration: underline;
 }
 
 /* Modal */

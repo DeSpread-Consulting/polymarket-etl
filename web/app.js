@@ -75,7 +75,7 @@ function getWeekRange(startDate, weeks) {
 let supabaseClient = null;
 let allEvents = [];
 let currentDate = new Date();
-let calendarOverviewStartWeek = 1; // 0 = current week, 1 = next week, etc.
+let calendarOverviewStartWeek = 0; // 0 = Week View 직후부터, 1 = 1주 더 뒤, etc.
 
 // Filter state (기본값: 거래량 $10K 이상만 표시)
 let filters = {
@@ -148,7 +148,7 @@ function setupEventListeners() {
 
     // Calendar Overview navigation
     document.getElementById('prevWeek').addEventListener('click', () => {
-        if (calendarOverviewStartWeek > 1) {
+        if (calendarOverviewStartWeek > 0) {
             calendarOverviewStartWeek--;
             renderCalendar();
         }
@@ -668,9 +668,12 @@ function renderWeekView(searchQuery = '') {
     const todayKST = getKSTToday();
     const filtered = getFilteredEvents(searchQuery);
 
-    // 이번 주 날짜 계산 (오늘 포함 7일)
+    // 현재 KST 시간 (시간 비교용)
+    const nowKST = new Date();
+
+    // 이번 주 날짜 계산 (오늘 포함 5일)
     const weekDates = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 5; i++) {
         weekDates.push(addDays(todayKST, i));
     }
 
@@ -680,10 +683,22 @@ function renderWeekView(searchQuery = '') {
         if (event.end_date) {
             const dateKey = toKSTDateString(event.end_date);
             if (weekDates.includes(dateKey)) {
-                if (!eventsByDate[dateKey]) {
-                    eventsByDate[dateKey] = [];
+                // 오늘 날짜인 경우, 현재 시간보다 미래인 이벤트만 포함
+                if (dateKey === todayKST) {
+                    const eventEndTime = new Date(event.end_date);
+                    if (eventEndTime > nowKST) {
+                        if (!eventsByDate[dateKey]) {
+                            eventsByDate[dateKey] = [];
+                        }
+                        eventsByDate[dateKey].push(event);
+                    }
+                } else {
+                    // 오늘이 아닌 날짜는 모두 포함
+                    if (!eventsByDate[dateKey]) {
+                        eventsByDate[dateKey] = [];
+                    }
+                    eventsByDate[dateKey].push(event);
                 }
-                eventsByDate[dateKey].push(event);
             }
         }
     });
@@ -697,7 +712,7 @@ function renderWeekView(searchQuery = '') {
 
     // Week range 업데이트
     const weekStart = new Date(todayKST + 'T00:00:00');
-    const weekEnd = new Date(addDays(todayKST, 6) + 'T00:00:00');
+    const weekEnd = new Date(addDays(todayKST, 4) + 'T00:00:00');
     const weekRangeText = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })}`;
     document.getElementById('weekRange').textContent = weekRangeText;
 
@@ -722,7 +737,7 @@ function renderWeekView(searchQuery = '') {
             <div class="week-day-header">
                 <div class="week-day-name">${dayName}</div>
                 <div class="week-day-date">${monthName} ${dayNumber}</div>
-                ${dayEvents.length > 0 ? `<div class="week-event-count">${dayEvents.length}</div>` : ''}
+                ${dayEvents.length > 0 ? `<div class="week-event-count">${dayEvents.length} events</div>` : ''}
             </div>
             <div class="week-day-events" id="week-${dateKey}"></div>
         `;
@@ -773,8 +788,8 @@ function renderCalendarOverview(searchQuery = '') {
     const todayKST = getKSTToday();
     const filtered = getFilteredEvents(searchQuery);
 
-    // 시작 날짜 계산 (calendarOverviewStartWeek에 따라)
-    const startDate = addDays(todayKST, calendarOverviewStartWeek * 7);
+    // 시작 날짜 계산 (Week View 끝난 다음날부터 + 추가 주)
+    const startDate = addDays(todayKST, 5 + (calendarOverviewStartWeek * 7));
 
     // 3주간 날짜 계산
     const weekDates = [];
@@ -817,28 +832,39 @@ function renderCalendarOverview(searchQuery = '') {
         const dayNumber = date.getDate();
         const eventCount = dayEvents.length;
 
-        // 이벤트 수에 따라 dot 개수 결정 (최대 3개)
-        const dotCount = Math.min(eventCount, 3);
-        let dotsHtml = '';
-        if (eventCount > 0) {
-            dotsHtml = '<div class="calendar-overview-dots">';
-            for (let i = 0; i < dotCount; i++) {
-                dotsHtml += '<div class="calendar-overview-dot"></div>';
-            }
-            dotsHtml += '</div>';
+        // 거래량 기준으로 정렬하여 상위 3개 선택
+        const topEvents = [...dayEvents]
+            .sort((a, b) => (parseFloat(b._totalVolume || b.volume) || 0) - (parseFloat(a._totalVolume || a.volume) || 0))
+            .slice(0, 3);
+
+        // HTML 생성
+        let eventsHtml = '';
+        if (topEvents.length > 0) {
+            eventsHtml = '<div class="calendar-overview-events">';
+            topEvents.forEach(event => {
+                const emoji = categoryEmojis[event.category] || categoryEmojis.default;
+                const prob = getMainProb(event);
+                const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
+                const title = truncate(event.title, 25);
+                const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
+                const slugSafe = escapeHtml(event.slug || '');
+
+                eventsHtml += `
+                    <div class="calendar-overview-event" onclick="event.stopPropagation(); openEventLink('${slugSafe}', '${searchQuery}');" title="${escapeHtml(event.title)}">
+                        <span class="overview-event-emoji">${emoji}</span>
+                        <span class="overview-event-title">${title}</span>
+                        <span class="overview-event-prob ${probClass}">${prob}%</span>
+                    </div>
+                `;
+            });
+            eventsHtml += '</div>';
         }
 
         dayEl.innerHTML = `
             <div class="calendar-overview-day-number">${dayNumber}</div>
-            ${dotsHtml}
-            ${eventCount > 3 ? `<div class="calendar-overview-more">+${eventCount - 3}</div>` : ''}
+            ${eventsHtml}
+            ${eventCount > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${eventCount - 3} more</div>` : ''}
         `;
-
-        // 클릭 시 해당 날짜의 이벤트 표시
-        if (eventCount > 0) {
-            dayEl.style.cursor = 'pointer';
-            dayEl.onclick = () => showDayEvents(dateKey);
-        }
 
         daysContainer.appendChild(dayEl);
     });
