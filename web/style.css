@@ -683,8 +683,11 @@ body {
     gap: 6px;
 }
 
-.week-event-emoji {
-    font-size: 16px;
+.week-event-image {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
     flex-shrink: 0;
 }
 
@@ -851,8 +854,11 @@ body {
     background: var(--bg-card);
 }
 
-.overview-event-emoji {
-    font-size: 12px;
+.overview-event-image {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    object-fit: cover;
     flex-shrink: 0;
 }
 
@@ -989,8 +995,20 @@ body {
     background: var(--bg-card);
 }
 
-.modal-event-emoji {
-    font-size: 20px;
+.modal-event-item.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.modal-event-item.disabled:hover {
+    background: var(--bg-tertiary);
+}
+
+.modal-event-image {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
 }
 
 .modal-event-content {

@@ -626,13 +626,19 @@ function getFilteredEvents(searchQuery = '', applyGrouping = true) {
         );
     }
 
-    // Apply time remaining filter (UTC 기준 비교 - 결과는 동일)
+    // 기본적으로 과거 이벤트 제외 (항상 적용)
+    filtered = filtered.filter(e => {
+        const endDate = new Date(e.end_date);
+        return endDate >= now;
+    });
+
+    // Apply time remaining filter (추가 범위 제한)
     if (filters.timeRemaining !== 'all') {
         const days = parseInt(filters.timeRemaining);
         const maxDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(e => {
             const endDate = new Date(e.end_date);
-            return endDate <= maxDate && endDate >= now;
+            return endDate <= maxDate;
         });
     }
 
@@ -752,7 +758,7 @@ function renderWeekView(searchQuery = '') {
             dayEvents.forEach(event => {
                 const time = getKSTTime(event.end_date);
                 const timeClass = getTimeClass(time);
-                const emoji = categoryEmojis[event.category] || categoryEmojis.default;
+                const imageUrl = event.image_url || '';
                 const prob = getMainProb(event);
                 const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
                 const volume = formatCurrency(event._totalVolume || event.volume);
@@ -768,7 +774,7 @@ function renderWeekView(searchQuery = '') {
                     <div class="week-event-time ${timeClass}">${time}</div>
                     <div class="week-event-content">
                         <div class="week-event-header">
-                            <span class="week-event-emoji">${emoji}</span>
+                            <img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
                             <span class="week-event-title">${event.title}${marketCountBadge}</span>
                         </div>
                         <div class="week-event-meta">
@@ -842,7 +848,7 @@ function renderCalendarOverview(searchQuery = '') {
         if (topEvents.length > 0) {
             eventsHtml = '<div class="calendar-overview-events">';
             topEvents.forEach(event => {
-                const emoji = categoryEmojis[event.category] || categoryEmojis.default;
+                const imageUrl = event.image_url || '';
                 const prob = getMainProb(event);
                 const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
                 const title = truncate(event.title, 25);
@@ -851,7 +857,7 @@ function renderCalendarOverview(searchQuery = '') {
 
                 eventsHtml += `
                     <div class="calendar-overview-event" onclick="event.stopPropagation(); openEventLink('${slugSafe}', '${searchQuery}');" title="${escapeHtml(event.title)}">
-                        <span class="overview-event-emoji">${emoji}</span>
+                        <img src="${imageUrl}" class="overview-event-image" alt="" onerror="this.style.display='none'">
                         <span class="overview-event-title">${title}</span>
                         <span class="overview-event-prob ${probClass}">${prob}%</span>
                     </div>
@@ -927,16 +933,21 @@ function showDayEvents(dateKey) {
     modalBody.innerHTML = '';
 
     dayEvents.forEach(event => {
-        const emoji = categoryEmojis[event.category] || categoryEmojis.default;
+        const imageUrl = event.image_url || '';
         const prob = getMainProb(event);
         const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
         const marketCount = event._marketCount || 1;
+        const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
+        const slugSafe = escapeHtml(event.slug || '');
+        const hasLink = slugSafe || searchQuery;
 
         const eventEl = document.createElement('div');
-        eventEl.className = 'modal-event-item';
-        eventEl.onclick = () => openEventLink(event.slug, event._searchQuery);
+        eventEl.className = `modal-event-item${!hasLink ? ' disabled' : ''}`;
+        if (hasLink) {
+            eventEl.onclick = () => openEventLink(event.slug, event._searchQuery);
+        }
         eventEl.innerHTML = `
-            <span class="modal-event-emoji">${emoji}</span>
+            <img src="${imageUrl}" class="modal-event-image" alt="" onerror="this.style.display='none'">
             <div class="modal-event-content">
                 <div class="modal-event-title">${event.title}</div>
                 <div class="modal-event-category">${event.category || 'Uncategorized'}${marketCount > 1 ? ` · ${marketCount} markets` : ''}</div>

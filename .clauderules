@@ -1,0 +1,49 @@
+# 폴리마켓 커뮤니티 캘린더
+
+Polymarket API → Supabase → Web (Vanilla JS)
+5일 Week View + 3주 Calendar Overview
+
+## 파일 구조
+- `main.py`: ETL 파이프라인 (python main.py로 데이터 업데이트)
+- `web/`: 정적 웹 (python3 -m http.server 8080)
+- `web/app.js`: 렌더링 로직
+- `web/style.css`: 스타일
+
+## 필수 규칙
+
+### DO ✅
+- CHANGELOG 자동 업데이트 (절대 물어보지 말 것)
+- 과거 이벤트 필터링: `endDate >= now` (항상)
+- 이미지 로드 실패: `onerror="this.style.display='none'"`
+- HTML 이스케이프: `escapeHtml()` 사용
+- 링크 없는 이벤트: `disabled` 클래스 추가
+
+### DON'T ❌
+- CHANGELOG 업데이트 여부 묻지 말 것
+- 단순 텍스트 변경은 파일 위치만 안내
+- 이모지 사용 금지 (실제 이미지 사용)
+- 과거 이벤트 표시 금지
+
+### 솔직하게 말하기 💬
+- 비효율적이거나 불가능한 요청: 바로 알려주고 대안 제시
+- 토큰 낭비되는 작업: 더 효율적인 방법 제안
+- 안될 것 같은 작업: 사전에 경고하고 이유 설명
+- 예: "이 방법은 26,000건 처리하기엔 너무 느립니다. 대신 X 방법 추천"
+
+## 디자인 규격
+
+### 이미지 크기
+- Week View: 24x24px, border-radius 4px
+- Calendar Overview: 16x16px, border-radius 3px
+- Modal: 32x32px, border-radius 6px
+
+### 확률 색상
+- 30% 미만: red (`.low`)
+- 30-70%: yellow (`.mid`)
+- 70% 이상: default
+
+## 데이터
+- 이벤트: ~26,000건
+- 필드: id, title, slug, end_date, volume, probs, image_url, category, tags
+- 그룹화: 동일 slug 합산 (`groupEventsBySlug`)
+- 시간: UTC → KST 변환

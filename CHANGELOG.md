@@ -1,5 +1,126 @@
 # 변경 이력
 
+## 2026-01-29
+
+### 1. 링크 없는 이벤트 처리 개선
+
+#### 파일: `web/app.js`
+**줄 번호**: 929-947
+
+**변경 내용**:
+- Modal에서 링크 없는 이벤트 감지 및 처리
+- `slug`와 `_searchQuery` 모두 없는 경우 비활성화
+
+**추가된 코드**:
+```javascript
+const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
+const slugSafe = escapeHtml(event.slug || '');
+const hasLink = slugSafe || searchQuery;
+
+const eventEl = document.createElement('div');
+eventEl.className = `modal-event-item${!hasLink ? ' disabled' : ''}`;
+if (hasLink) {
+    eventEl.onclick = () => openEventLink(event.slug, event._searchQuery);
+}
+```
+
+**효과**: 링크 없는 이벤트를 클릭해도 아무 일도 일어나지 않으며, 시각적으로 표시됨
+
+---
+
+#### 파일: `web/style.css`
+**줄 번호**: 997-1003
+
+**추가된 CSS**:
+```css
+.modal-event-item.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.modal-event-item.disabled:hover {
+    background: var(--bg-tertiary);
+}
+```
+
+**효과**:
+- 링크 없는 이벤트는 투명도 50%로 흐릿하게 표시
+- 마우스 커서가 `not-allowed`로 변경
+- hover 효과 비활성화
+
+---
+
+### 2. 시장별 로고 이미지 적용
+
+#### 파일: `web/app.js`
+**줄 번호**: 755, 845, 930
+
+**변경 내용**:
+- 카테고리 이모지 대신 폴리마켓 API에서 제공하는 실제 시장 이미지 표시
+- Week View, Calendar Overview, Modal 모두 적용
+
+**변경 전**:
+```javascript
+const emoji = categoryEmojis[event.category] || categoryEmojis.default;
+// ...
+<span class="week-event-emoji">${emoji}</span>
+```
+
+**변경 후**:
+```javascript
+const imageUrl = event.image_url || '';
+// ...
+<img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
+```
+
+**효과**: 각 시장의 실제 썸네일 이미지가 표시되어 시각적으로 더 명확함
+
+---
+
+#### 파일: `web/style.css`
+**줄 번호**: 686-689, 854-857, 992-995
+
+**변경 내용**:
+- 이모지 폰트 스타일을 이미지 스타일로 교체
+- 각 컴포넌트별 적절한 이미지 크기 설정
+
+**추가된 CSS**:
+```css
+/* Week View 이미지 */
+.week-event-image {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+/* Calendar Overview 이미지 */
+.overview-event-image {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+/* Modal 이미지 */
+.modal-event-image {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    object-fit: cover;
+}
+```
+
+**효과**:
+- Week View: 24x24px 썸네일
+- Calendar Overview: 16x16px 썸네일
+- Modal: 32x32px 썸네일
+- 이미지 로드 실패 시 자동으로 숨김 처리
+
+---
+
 ## 2026-01-28
 
 ### 1. Week View 가로 레이아웃 변경 및 5일로 축소
