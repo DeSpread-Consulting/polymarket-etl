@@ -328,20 +328,9 @@ function extractTags() {
     document.getElementById('tagCount').textContent = `(${Object.keys(allTags).length})`;
 }
 
-// 카테고리 매핑 규칙 (전역 상수)
-const CATEGORY_RULES = {
-    'Sports': ['Sports', 'NBA', 'NFL', 'NHL', 'Soccer', 'Basketball', 'Football', 'Baseball', 'Hockey', 'NCAA', 'Games', 'Esports', 'Cricket', 'Tennis'],
-    'Crypto': ['Crypto', 'Bitcoin', 'Ethereum', 'BTC', 'ETH', 'Blockchain', 'DeFi', 'NFT', 'Solana', 'XRP', 'Ripple'],
-    'Politics': ['Politics', 'Elections', 'Trump', 'Biden', 'Congress', 'Senate', 'President', 'Primaries', 'Republican', 'Democrat', 'Geopolitics'],
-    'Pop Culture': ['Pop Culture', 'Culture', 'Entertainment', 'Movies', 'Music', 'Celebrity', 'Awards', 'Oscars', 'Grammys'],
-    'Finance': ['Finance', 'Stocks', 'Economy', 'Market', 'Trading', 'Investment', 'GDP', 'Inflation'],
-    'Science': ['Science', 'Technology', 'Tech', 'AI', 'Space', 'Climate', 'Research']
-};
-
-// 이벤트의 카테고리를 반환하는 함수
+// 이벤트의 카테고리를 반환하는 함수 (API 데이터 직접 사용)
 function inferCategory(event) {
-    // Supabase에 저장된 추론된 카테고리 사용
-    return event.inferred_category || event.category || 'Uncategorized';
+    return event.category || 'Uncategorized';
 }
 
 function extractCategories() {

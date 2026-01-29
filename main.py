@@ -91,7 +91,7 @@ def safe_float(value) -> float:
 
 def infer_category_from_title(title: str, category: Optional[str]) -> str:
     """제목 기반으로 카테고리 추론"""
-    if category:
+    if category and category != "Uncategorized":
         return category
 
     if not title:
@@ -102,8 +102,8 @@ def infer_category_from_title(title: str, category: Optional[str]) -> str:
     # Sports 키워드
     sports_keywords = ['nba', 'nfl', 'nhl', 'mlb', 'soccer', 'basketball', 'football', 'baseball',
                       'hockey', 'ncaa', 'fifa', 'champion', 'playoff', 'finals', 'game',
-                      'vs', 'vs.', 'team', 'player', 'score', 'win', 'match', 'tennis',
-                      'cricket', 'golf', 'racing', 'boxing', 'ufc', 'mma', 'esports']
+                      'vs', 'vs.', ' v ', ' v. ', 'versus', 'team', 'player', 'score', 'win', 'match', 'tennis',
+                      'cricket', 'golf', 'racing', 'boxing', 'ufc', 'mma', 'esports', 'league', 'tournament']
 
     # Crypto 키워드
     crypto_keywords = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'blockchain', 'defi',
@@ -163,7 +163,7 @@ def transform_data(raw_data: list[dict]) -> list[dict]:
         elif isinstance(tags, str):
             tags = safe_json_parse(tags) or []
 
-        # 카테고리 추론
+        # 카테고리 추론 (API category 우선, 없으면 제목에서 추론)
         inferred_cat = infer_category_from_title(
             item.get("question", ""),
             item.get("category")
@@ -179,10 +179,9 @@ def transform_data(raw_data: list[dict]) -> list[dict]:
             "volume_24hr": safe_float(item.get("volume24hr")),
             "probs": outcome_prices,
             "outcomes": outcomes,
-            "category": item.get("category"),
+            "category": inferred_cat,
             "tags": tags,
             "image_url": item.get("image"),
-            "inferred_category": inferred_cat,
         }
 
         # id가 없는 레코드는 건너뛰기

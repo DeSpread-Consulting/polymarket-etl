@@ -2,6 +2,12 @@
 
 ## 2026-01-29
 
+### 키워드 기반 카테고리 추론 (복원)
+- **main.py**: 제목 기반 키워드 매칭으로 카테고리 추론
+- API category 우선 사용, 없으면 키워드 매칭
+- Sports, Crypto, Politics, Finance, Pop Culture, Science 분류
+- Sports 키워드 보강: 'vs', 'v', 'versus', 'league', 'tournament' 등 추가
+
 ### Python 3.9 호환성 수정
 - `main.py`: `str | None` → `Optional[str]` 타입 힌트 변경 (Python 3.10+ 구문 → 3.9 호환)
 
