@@ -78,23 +78,6 @@
             <span id="dataRangeInfo">Showing events within the next 30 days</span>
         </div>
 
-        <!-- Color Legend -->
-        <div class="color-legend-container" id="colorLegendContainer">
-            <div class="color-legend-header" id="colorLegendHeader">
-                <span class="color-legend-title" id="colorLegendTitle">색상 범례</span>
-                <button class="color-legend-toggle" id="colorLegendToggle">
-                    <svg class="legend-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </button>
-            </div>
-            <div class="color-legend-content" id="colorLegendContent">
-                <div class="color-legend-grid" id="colorLegendGrid">
-                    <!-- Legend items will be populated by JavaScript -->
-                </div>
-            </div>
-        </div>
-
         <!-- Toolbar -->
         <div class="toolbar">
             <div class="toolbar-left">
@@ -108,6 +91,14 @@
                 </div>
             </div>
             <div class="toolbar-right">
+                <!-- Density Toggle -->
+                <button class="icon-btn" id="densityToggle" title="Density">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
                 <!-- Theme Toggle -->
                 <button class="icon-btn" id="themeToggle" title="Toggle Theme">
                     <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -138,6 +129,11 @@
                     </svg>
                 </button>
             </div>
+        </div>
+
+        <!-- Quick Category Filters -->
+        <div class="quick-filters" id="quickFilters">
+            <!-- Category chips will be populated by JavaScript -->
         </div>
 
         <!-- Filters Row -->

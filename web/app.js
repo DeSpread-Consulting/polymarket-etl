@@ -125,14 +125,20 @@ const categoryColors = {
     'default': '#6b7280'      // Gray
 };
 
+// Tooltip element
+let tooltipElement = null;
+let tooltipTimeout = null;
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 앱 시작');
 
     initTheme();
+    initDensity();
     initLanguage();
     initSupabase();
-    initColorLegend();
+    initQuickFilters();
+    initTooltip();
     setupEventListeners();
     await loadData();
     updateActiveFiltersDisplay(); // 기본 필터 UI 표시
@@ -142,6 +148,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+function initDensity() {
+    const savedDensity = localStorage.getItem('density') || 'comfortable';
+    document.documentElement.setAttribute('data-density', savedDensity);
 }
 
 function initSupabase() {
@@ -158,6 +169,16 @@ function initSupabase() {
 }
 
 function setupEventListeners() {
+    // Density toggle
+    const densityToggle = document.getElementById('densityToggle');
+    if (densityToggle) {
+        densityToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleDensity();
+        });
+    }
+
     // Theme toggle
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
@@ -282,6 +303,24 @@ function toggleTheme() {
     localStorage.setItem('theme', newTheme);
 }
 
+function toggleDensity() {
+    const html = document.documentElement;
+    const currentDensity = html.getAttribute('data-density') || 'comfortable';
+
+    // Cycle through: comfortable -> compact -> spacious -> comfortable
+    let newDensity;
+    if (currentDensity === 'comfortable') {
+        newDensity = 'compact';
+    } else if (currentDensity === 'compact') {
+        newDensity = 'spacious';
+    } else {
+        newDensity = 'comfortable';
+    }
+
+    html.setAttribute('data-density', newDensity);
+    localStorage.setItem('density', newDensity);
+}
+
 function handleRefresh() {
     const refreshBtn = document.getElementById('refreshBtn');
 
@@ -302,48 +341,175 @@ function handleRefresh() {
     }, 500);
 }
 
-function initColorLegend() {
-    const legendGrid = document.getElementById('colorLegendGrid');
-    if (!legendGrid) return;
+function initQuickFilters() {
+    const quickFiltersContainer = document.getElementById('quickFilters');
+    if (!quickFiltersContainer) return;
 
     // Clear existing content
-    legendGrid.innerHTML = '';
+    quickFiltersContainer.innerHTML = '';
 
-    // Create legend items for each category
-    Object.entries(categoryColors).forEach(([category, color]) => {
-        if (category === 'default') return; // Skip default
+    // Create category chips (exclude Uncategorized and default)
+    const mainCategories = Object.keys(categoryColors).filter(cat =>
+        cat !== 'default' && cat !== 'Uncategorized'
+    );
 
-        const legendItem = document.createElement('div');
-        legendItem.className = 'color-legend-item';
-        legendItem.innerHTML = `
-            <div class="legend-color-bar" style="background-color: ${color};"></div>
-            <span class="legend-category-name">${category}</span>
+    mainCategories.forEach(category => {
+        const color = categoryColors[category];
+        const chip = document.createElement('button');
+        chip.className = 'category-chip';
+        chip.dataset.category = category;
+
+        // Check if category is excluded by default
+        if (filters.excludedCategories.includes(category)) {
+            chip.classList.add('excluded');
+        }
+
+        chip.innerHTML = `
+            <span class="category-chip-color" style="background-color: ${color};"></span>
+            <span>${category}</span>
         `;
-        legendGrid.appendChild(legendItem);
-    });
 
-    // Setup toggle functionality
-    const toggleBtn = document.getElementById('colorLegendToggle');
-    const header = document.getElementById('colorLegendHeader');
-    const content = document.getElementById('colorLegendContent');
-    const container = document.getElementById('colorLegendContainer');
-
-    if (toggleBtn && header && content && container) {
-        toggleBtn.addEventListener('click', (e) => {
+        chip.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            container.classList.toggle('collapsed');
+            toggleCategoryFilter(category);
         });
 
-        // 항상 펼쳐진 상태로 유지 (자동 접기 제거)
+        quickFiltersContainer.appendChild(chip);
+    });
+}
+
+function toggleCategoryFilter(category) {
+    const index = filters.excludedCategories.indexOf(category);
+
+    if (index > -1) {
+        // Remove from excluded (show this category)
+        filters.excludedCategories.splice(index, 1);
+    } else {
+        // Add to excluded (hide this category)
+        filters.excludedCategories.push(category);
+    }
+
+    // Update UI
+    updateQuickFilterChips();
+    updateActiveFiltersDisplay();
+    renderCalendar();
+}
+
+function updateQuickFilterChips() {
+    const chips = document.querySelectorAll('.category-chip');
+    chips.forEach(chip => {
+        const category = chip.dataset.category;
+        if (filters.excludedCategories.includes(category)) {
+            chip.classList.add('excluded');
+        } else {
+            chip.classList.remove('excluded');
+        }
+    });
+}
+
+// Tooltip functions
+function initTooltip() {
+    // Create tooltip element
+    tooltipElement = document.createElement('div');
+    tooltipElement.className = 'event-tooltip';
+    document.body.appendChild(tooltipElement);
+}
+
+function showEventTooltip(event, eventData) {
+    if (!tooltipElement || !eventData) return;
+
+    // Clear any existing timeout
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+    }
+
+    // Get event details
+    const prob = getMainProb(eventData);
+    const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
+    const volume = formatCurrency(eventData._totalVolume || eventData.volume || 0);
+    const volume24hr = formatCurrency(eventData.volume_24hr || 0);
+    const category = inferCategory(eventData);
+    const categoryColor = categoryColors[category] || categoryColors['default'];
+
+    // Get liquidity if available
+    const liquidity = eventData.liquidity ? formatCurrency(eventData.liquidity) : 'N/A';
+
+    // Build tooltip HTML
+    const t = translations[currentLang];
+    tooltipElement.innerHTML = `
+        <div class="tooltip-title">${escapeHtml(eventData.title)}</div>
+        <div class="tooltip-stats">
+            <div class="tooltip-stat">
+                <span class="tooltip-stat-label">${t.probability || 'Probability'}:</span>
+                <span class="tooltip-stat-value prob ${probClass}">${prob}%</span>
+            </div>
+            <div class="tooltip-stat">
+                <span class="tooltip-stat-label">${t.volume || 'Volume'}:</span>
+                <span class="tooltip-stat-value">${volume}</span>
+            </div>
+            <div class="tooltip-stat">
+                <span class="tooltip-stat-label">${t.volume24hr || '24hr Volume'}:</span>
+                <span class="tooltip-stat-value">${volume24hr}</span>
+            </div>
+            ${liquidity !== 'N/A' ? `
+            <div class="tooltip-stat">
+                <span class="tooltip-stat-label">${t.liquidity || 'Liquidity'}:</span>
+                <span class="tooltip-stat-value">${liquidity}</span>
+            </div>
+            ` : ''}
+        </div>
+        <div class="tooltip-category">
+            <span class="tooltip-category-dot" style="background-color: ${categoryColor};"></span>
+            ${category}
+        </div>
+    `;
+
+    // Position tooltip near cursor
+    positionTooltip(event);
+
+    // Show tooltip with delay
+    tooltipTimeout = setTimeout(() => {
+        tooltipElement.classList.add('visible');
+    }, 300);
+}
+
+function hideEventTooltip() {
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+    }
+    if (tooltipElement) {
+        tooltipElement.classList.remove('visible');
     }
 }
 
-function toggleColorLegend() {
-    const container = document.getElementById('colorLegendContainer');
-    if (container) {
-        container.classList.toggle('collapsed');
+function positionTooltip(event) {
+    if (!tooltipElement) return;
+
+    const padding = 10;
+    const tooltipRect = tooltipElement.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let x = event.clientX + padding;
+    let y = event.clientY + padding;
+
+    // Adjust if tooltip goes off right edge
+    if (x + tooltipRect.width > viewportWidth - padding) {
+        x = event.clientX - tooltipRect.width - padding;
     }
+
+    // Adjust if tooltip goes off bottom edge
+    if (y + tooltipRect.height > viewportHeight - padding) {
+        y = event.clientY - tooltipRect.height - padding;
+    }
+
+    // Ensure tooltip doesn't go off top or left edges
+    x = Math.max(padding, x);
+    y = Math.max(padding, y);
+
+    tooltipElement.style.left = x + 'px';
+    tooltipElement.style.top = y + 'px';
 }
 
 async function loadData() {
@@ -590,6 +756,7 @@ function syncFilterUI() {
 function applyFilters() {
     filters = JSON.parse(JSON.stringify(tempFilters));
     closeFilterModal();
+    updateQuickFilterChips();
     updateActiveFiltersDisplay();
     renderCalendar();
 }
@@ -615,6 +782,7 @@ function clearAllFilters() {
         minVolume: 10000,
         minLiquidity: 0
     };
+    updateQuickFilterChips();
     updateActiveFiltersDisplay();
     renderCalendar();
 }
@@ -640,7 +808,7 @@ function updateActiveFiltersDisplay() {
         hasFilters = true;
         const tagEl = document.createElement('span');
         tagEl.className = 'filter-tag excluded';
-        tagEl.innerHTML = `🚫 ${getTranslatedCategory(category)} <span class="remove-tag" data-type="excludedCategory" data-value="${category}">×</span>`;
+        tagEl.innerHTML = `🚫 ${category} <span class="remove-tag" data-type="excludedCategory" data-value="${category}">×</span>`;
         container.appendChild(tagEl);
     });
 
@@ -950,14 +1118,26 @@ function renderWeekView(searchQuery = '') {
                 eventEl.className = 'week-event';
                 eventEl.style.borderLeftColor = categoryColor;
                 eventEl.setAttribute('data-category', category);
-                eventEl.setAttribute('title', `${event.title} (${getTranslatedCategory(category)})`);
                 eventEl.onclick = () => openEventLink(slugSafe, searchQuery);
+
+                // Add hover event listeners for tooltip
+                eventEl.addEventListener('mouseenter', (e) => showEventTooltip(e, event));
+                eventEl.addEventListener('mousemove', (e) => positionTooltip(e));
+                eventEl.addEventListener('mouseleave', hideEventTooltip);
+
                 eventEl.innerHTML = `
                     <div class="week-event-time ${timeClass}">${time}</div>
                     <div class="week-event-content">
                         <div class="week-event-header">
                             <img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
                             <span class="week-event-title">${event.title}${marketCountBadge}</span>
+                            <button class="event-link-btn" onclick="event.stopPropagation(); window.open('https://polymarket.com/event/${slugSafe}', '_blank');" title="Open in Polymarket">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                            </button>
                         </div>
                         <div class="week-event-meta">
                             <span class="week-event-prob ${probClass}">${prob}%</span>
@@ -1038,10 +1218,19 @@ function renderCalendarOverview(searchQuery = '') {
             .sort((a, b) => (parseFloat(b._totalVolume || b.volume) || 0) - (parseFloat(a._totalVolume || a.volume) || 0))
             .slice(0, 3);
 
-        // HTML 생성
-        let eventsHtml = '';
+        // Build day element
+        dayEl.innerHTML = `
+            ${monthLabel}
+            <div class="calendar-overview-day-number">${dayNumber}</div>
+            ${topEvents.length > 0 ? '<div class="calendar-overview-events"></div>' : ''}
+            ${eventCount > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${eventCount - 3} ${translations[currentLang].more}</div>` : ''}
+        `;
+
+        daysContainer.appendChild(dayEl);
+
+        // Add events with hover listeners
         if (topEvents.length > 0) {
-            eventsHtml = '<div class="calendar-overview-events">';
+            const eventsContainer = dayEl.querySelector('.calendar-overview-events');
             topEvents.forEach(event => {
                 const imageUrl = event.image_url || '';
                 const prob = getMainProb(event);
@@ -1054,25 +1243,26 @@ function renderCalendarOverview(searchQuery = '') {
                 const category = inferCategory(event);
                 const categoryColor = categoryColors[category] || categoryColors['default'];
 
-                eventsHtml += `
-                    <div class="calendar-overview-event" data-category="${category}" style="border-left-color: ${categoryColor};" onclick="event.stopPropagation(); openEventLink('${slugSafe}', '${searchQuery}');" title="${escapeHtml(event.title)} (${getTranslatedCategory(category)})">
-                        <img src="${imageUrl}" class="overview-event-image" alt="" onerror="this.style.display='none'">
-                        <span class="overview-event-title">${title}</span>
-                        <span class="overview-event-prob ${probClass}">${prob}%</span>
-                    </div>
+                const eventEl = document.createElement('div');
+                eventEl.className = 'calendar-overview-event';
+                eventEl.dataset.category = category;
+                eventEl.style.borderLeftColor = categoryColor;
+                eventEl.onclick = (e) => { e.stopPropagation(); openEventLink(slugSafe, searchQuery); };
+
+                // Add hover event listeners for tooltip
+                eventEl.addEventListener('mouseenter', (e) => showEventTooltip(e, event));
+                eventEl.addEventListener('mousemove', (e) => positionTooltip(e));
+                eventEl.addEventListener('mouseleave', hideEventTooltip);
+
+                eventEl.innerHTML = `
+                    <img src="${imageUrl}" class="overview-event-image" alt="" onerror="this.style.display='none'">
+                    <span class="overview-event-title">${title}</span>
+                    <span class="overview-event-prob ${probClass}">${prob}%</span>
                 `;
+
+                eventsContainer.appendChild(eventEl);
             });
-            eventsHtml += '</div>';
         }
-
-        dayEl.innerHTML = `
-            ${monthLabel}
-            <div class="calendar-overview-day-number">${dayNumber}</div>
-            ${eventsHtml}
-            ${eventCount > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${eventCount - 3} ${translations[currentLang].more}</div>` : ''}
-        `;
-
-        daysContainer.appendChild(dayEl);
     });
 }
 
@@ -1100,6 +1290,18 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+}
+
+function highlightSearchTerm(text, searchTerm) {
+    if (!text || !searchTerm || searchTerm.trim() === '') {
+        return escapeHtml(text);
+    }
+
+    const escapedText = escapeHtml(text);
+    const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special chars
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+
+    return escapedText.replace(regex, '<span class="search-highlight">$1</span>');
 }
 
 function openEventLink(slug, searchQuery) {
@@ -1150,7 +1352,7 @@ function showDayEvents(dateKey) {
             <img src="${imageUrl}" class="modal-event-image" alt="" onerror="this.style.display='none'">
             <div class="modal-event-content">
                 <div class="modal-event-title">${event.title}</div>
-                <div class="modal-event-category">${getTranslatedCategory(event.category || 'Uncategorized')}${marketCount > 1 ? ` · ${marketCount}${translations[currentLang].markets}` : ''}</div>
+                <div class="modal-event-category">${event.category || 'Uncategorized'}${marketCount > 1 ? ` · ${marketCount}${translations[currentLang].markets}` : ''}</div>
             </div>
             <span class="modal-event-prob ${probClass}">${prob}%</span>
         `;
@@ -1184,7 +1386,6 @@ const translations = {
         days: '일',
         dataRangeInfo: '앞으로 30일 이내 이벤트만 표시',
         refreshTooltip: '과거 이벤트 숨기기',
-        colorLegendTitle: '색상 범례',
         categories: {
             'Sports': '스포츠',
             'Crypto': '암호화폐',
@@ -1201,7 +1402,9 @@ const translations = {
         loading: '로딩 중...',
         noResults: '결과 없음',
         volume: '거래량',
+        volume24hr: '24시간 거래량',
         liquidity: '유동성',
+        probability: '확률',
         activeMarkets: '활성 시장',
         activeMarketsDesc: '현재 활성화된 시장',
         totalLiquidity: '총 유동성',
@@ -1223,7 +1426,6 @@ const translations = {
         days: 'd',
         dataRangeInfo: 'Showing events within the next 30 days',
         refreshTooltip: 'Hide past events',
-        colorLegendTitle: 'Color Legend',
         categories: {
             'Sports': 'Sports',
             'Crypto': 'Crypto',
@@ -1240,7 +1442,9 @@ const translations = {
         loading: 'Loading...',
         noResults: 'No results',
         volume: 'Volume',
+        volume24hr: '24hr Volume',
         liquidity: 'Liquidity',
+        probability: 'Probability',
         activeMarkets: 'Active Markets',
         activeMarketsDesc: 'Currently active markets',
         totalLiquidity: 'Total Liquidity',
@@ -1273,12 +1477,6 @@ function translatePage() {
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.setAttribute('title', t.refreshTooltip);
-    }
-
-    // Color legend title
-    const colorLegendTitle = document.getElementById('colorLegendTitle');
-    if (colorLegendTitle) {
-        colorLegendTitle.textContent = t.colorLegendTitle;
     }
 
     // Filter label
@@ -1325,6 +1523,11 @@ function translatePage() {
     const langToggle = document.getElementById('langToggle');
     if (langToggle) {
         langToggle.querySelector('.lang-text').textContent = currentLang.toUpperCase();
+    }
+
+    // Update quick filter chips
+    if (typeof initQuickFilters === 'function') {
+        initQuickFilters();
     }
 
     // Re-render calendar to update translated categories
