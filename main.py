@@ -88,46 +88,132 @@ def safe_float(value) -> float:
     return 0.0
 
 
-def infer_category_from_title(title: str, category: Optional[str]) -> str:
-    """제목 기반으로 카테고리 추론"""
+def infer_category_from_title(title: str, category: Optional[str], tags: list = None) -> str:
+    """제목 + 태그 기반으로 카테고리 추론"""
     if category and category != "Uncategorized":
         return category
 
-    if not title:
+    # 제목과 태그를 모두 검사 대상에 포함
+    search_text = title.lower() if title else ""
+    if tags:
+        tag_text = " ".join([tag.lower() for tag in tags if tag and isinstance(tag, str)])
+        search_text += " " + tag_text
+
+    if not search_text:
         return 'Uncategorized'
 
-    title_lower = title.lower()
+    title_lower = search_text
 
-    # Sports 키워드
-    sports_keywords = ['nba', 'nfl', 'nhl', 'mlb', 'soccer', 'basketball', 'football', 'baseball',
-                      'hockey', 'ncaa', 'fifa', 'champion', 'playoff', 'finals', 'game',
-                      'vs', 'vs.', ' v ', ' v. ', 'versus', 'team', 'player', 'score', 'win', 'match', 'tennis',
-                      'cricket', 'golf', 'racing', 'boxing', 'ufc', 'mma', 'esports', 'league', 'tournament']
+    # Sports 키워드 (대폭 확장)
+    sports_keywords = [
+        # 기존 키워드
+        'nba', 'nfl', 'nhl', 'mlb', 'soccer', 'basketball', 'football', 'baseball',
+        'hockey', 'ncaa', 'fifa', 'champion', 'playoff', 'finals', 'game',
+        'vs', 'vs.', ' v ', ' v. ', 'versus', 'team', 'player', 'score', 'win', 'match', 'tennis',
+        'cricket', 'golf', 'racing', 'boxing', 'ufc', 'mma', 'esports', 'league', 'tournament',
+        'bowl', 'spread', 'finish', 'standings', 'ligue', 'halftime', 'points',
+        # 새로 추가된 키워드
+        'rebounds', 'assists', 'over/under', 'o/u', 'rushing yards', 'receiving yards',
+        'passing yards', 'touchdowns', 'interceptions', 'field goal', 'dvalishvili',
+        'yan', 'fight', 'promoted', 'epl', 'premier league', 'wrestle', 'athletic',
+        # 2차 추가
+        'traded to', 'sign with', 'manager of', 'rookie card', 'advance to', 'qualify to',
+        'manchester united', 'real madrid', 'juventus', 'antetokounmpo', 'jokic', 'cs2',
+        'masters santiago', 'valorant', 'red bull', 'scream 7'
+    ]
 
-    # Crypto 키워드
-    crypto_keywords = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'blockchain', 'defi',
-                      'nft', 'solana', 'xrp', 'ripple', 'cardano', 'ada', 'doge', 'coin',
-                      'token', 'wallet', 'mining', 'exchange', 'binance', 'coinbase']
+    # Crypto 키워드 (주요 암호화폐 추가)
+    crypto_keywords = [
+        # 기존 키워드
+        'bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'blockchain', 'defi',
+        'nft', 'solana', 'xrp', 'ripple', 'cardano', 'ada', 'doge', 'coin',
+        'token', 'wallet', 'mining', 'exchange', 'binance', 'coinbase',
+        'base', 'fdv', 'market cap', 'mcap',
+        # 새로 추가된 암호화폐
+        'hyperliquid', 'pump.fun', 'zcash', 'plasma', 'pyusd', 'gho', 'usr',
+        'bnb', 'doppler', 'lighter', 'usdc', 'usdt', 'stablecoin', 'depeg',
+        'web3', 'dao', 'consensys',
+        # 2차 추가
+        'uni', 'uniswap', 'fabric', 'vitalik buterin', 'sbf', 'arthur hayes',
+        'ansem', 'anatoly yakovenko', 'saylor'
+    ]
 
-    # Politics 키워드
-    politics_keywords = ['trump', 'biden', 'president', 'election', 'congress', 'senate',
-                        'democrat', 'republican', 'vote', 'poll', 'campaign', 'governor',
-                        'mayor', 'minister', 'parliament', 'government', 'political']
+    # Politics 키워드 (국제 정치, 법률 추가)
+    politics_keywords = [
+        # 기존 키워드
+        'trump', 'biden', 'president', 'election', 'congress', 'senate',
+        'democrat', 'republican', 'vote', 'poll', 'campaign', 'governor',
+        'mayor', 'minister', 'parliament', 'government', 'political',
+        'israel', 'palestine', 'military', 'guilty', 'sentenced', 'trial',
+        'court', 'lawsuit', 'verdict', 'justice',
+        # 새로 추가된 키워드
+        'nuclear', 'strike', 'iran', 'russia', 'trade deal', 'trade agreement',
+        'modi', 'netanyahu', 'erdogan', 'xi jinping', 'macron', 'leader out',
+        'scotus', 'supreme court', 'conviction', 'indictment', 'war', 'peace',
+        'sanctions', 'diplomatic', 'united nations', 'secretary general',
+        'yoon', 'custody', 'venezuela', 'china', 'taiwan',
+        # 2차 추가
+        'zelenskyy', 'putin', 'bernie endorse', 'arrested', 'exiled', 'maduro',
+        'nato', 'abraham accords', 'saudi arabia', 'oman', 'rsf', 'khartoum',
+        'ilhan omar', 'convicted', 'charged with', 'epstein', 'aguiar'
+    ]
 
-    # Finance 키워드
-    finance_keywords = ['stock', 'market', 'economy', 'gdp', 'inflation', 'fed', 'federal reserve',
-                       'dow', 'nasdaq', 's&p', 'trading', 'price', 'dollar', 'euro', 'bank']
+    # Finance 키워드 (주식, 원자재, 경제지표 추가)
+    finance_keywords = [
+        # 기존 키워드
+        'stock', 'market', 'economy', 'gdp', 'inflation', 'fed', 'federal reserve',
+        'dow', 'nasdaq', 's&p', 'trading', 'price', 'dollar', 'euro', 'bank',
+        'earnings', 'quarterly', 'revenue', 'profit',
+        # 새로 추가된 키워드
+        'silver', 'gold', 'oil', 'crude', 'commodity', 'treasury', 'yield',
+        'debt', 'trillion', 'nvidia', 'nvda', 'amazon', 'amzn', 'meta',
+        'palantir', 'pltr', 'opendoor', 'ipo', 'magnificent 7', 'ecb',
+        'interest rate', 'bps', 'unemployment', 'home value', 'median',
+        'eggs cost', 'tsa passengers', 'kospi', 'nikkei',
+        # 2차 추가
+        'ceo of', 'mortgage rate', 'recession', 'net worth', 'richest person',
+        'doordash', 'lululemon', 'glencore', 'rio tinto', 'merger', 'bezos',
+        'ellison', 'jensen huang', 'larry page', 'elon musk\'s net worth'
+    ]
 
-    # Pop Culture 키워드
-    culture_keywords = ['movie', 'film', 'album', 'song', 'artist', 'celebrity', 'award',
-                       'oscar', 'grammy', 'emmy', 'netflix', 'spotify', 'box office']
+    # Pop Culture 키워드 (소셜미디어, 엔터테인먼트 추가)
+    culture_keywords = [
+        # 기존 키워드
+        'movie', 'film', 'album', 'song', 'artist', 'celebrity', 'award',
+        'oscar', 'grammy', 'emmy', 'netflix', 'spotify', 'box office',
+        'euphoria', 'season', 'episode', 'show', 'series', 'die',
+        # 새로 추가된 키워드
+        'elon musk tweet', 'elon musk post', 'james bond', 'avatar', 'star wars',
+        'taylor swift', 'wedding', 'mrbeast', 'mindshare', 'views',
+        'streaming', 'concert', 'babymonster', 'kpop', 'anime', 'manga',
+        'tom holland', 'jack lowdon', 'marvel', 'disney', 'hbo',
+        # 2차 추가
+        'billboard', 'debut no.1', 'podcast', 'divorce', 'bill clinton',
+        'creative director', 'versace', 'opening weekend', 'domestically',
+        'marty supreme', 'greenland', 'anaconda', 'bully', 'drake maye',
+        'boy names', 'girl names', 'ssa', 'baby names'
+    ]
 
-    # Science/Tech 키워드
-    science_keywords = ['ai', 'artificial intelligence', 'robot', 'space', 'nasa', 'spacex',
-                       'climate', 'vaccine', 'drug', 'technology', 'apple', 'google',
-                       'microsoft', 'tesla', 'research', 'scientific']
+    # Science/Tech 키워드 (날씨, 자연재해, AI 추가)
+    science_keywords = [
+        # 기존 키워드
+        'ai', 'artificial intelligence', 'robot', 'space', 'nasa', 'spacex',
+        'climate', 'vaccine', 'drug', 'technology', 'apple', 'google',
+        'microsoft', 'tesla', 'research', 'scientific',
+        'artemis', 'rocket', 'launch', 'temperature', 'weather', 'celsius',
+        'fahrenheit', 'forecast',
+        # 새로 추가된 키워드
+        '°c', '°f', 'hottest year', 'tornado', 'earthquake', 'megaquake',
+        'natural disaster', 'magnitude', 'measles', 'epidemic', 'pandemic',
+        'grok', 'gpt', 'released', 'anthropic', 'openai', 'chatbot',
+        'llm', 'machine learning', 'cerebras', 'chipmaker', 'semiconductor',
+        'highest temperature', 'lowest temperature', 'ankara', 'seattle',
+        # 2차 추가
+        'volcanic eruptions', 'vei', 'cloudflare incident', 'waymo', 'autonomous',
+        'self-driving', 'valve', 'cache', 'map pool'
+    ]
 
-    # 키워드 매칭
+    # 키워드 매칭 (순서 중요: 더 구체적인 것부터 체크)
     if any(keyword in title_lower for keyword in sports_keywords):
         return 'Sports'
     if any(keyword in title_lower for keyword in crypto_keywords):
@@ -162,10 +248,11 @@ def transform_data(raw_data: list[dict]) -> list[dict]:
         elif isinstance(tags, str):
             tags = safe_json_parse(tags) or []
 
-        # 카테고리 추론 (API category 우선, 없으면 제목에서 추론)
+        # 카테고리 추론 (API category 우선, 없으면 제목 + 태그에서 추론)
         inferred_cat = infer_category_from_title(
             item.get("question", ""),
-            item.get("category")
+            item.get("category"),
+            tags  # 태그도 전달
         )
 
         record = {

@@ -77,10 +77,10 @@ let allEvents = [];
 let currentDate = new Date();
 let calendarOverviewStartWeek = 0; // 0 = Week View 직후부터, 1 = 1주 더 뒤, etc.
 
-// Filter state (기본값: 거래량 $10K 이상만 표시)
+// Filter state (기본값: 거래량 $10K 이상, 스포츠 카테고리 제외)
 let filters = {
     tags: [],
-    excludedCategories: [], // 제외할 카테고리 리스트
+    excludedCategories: ['Sports'], // 기본적으로 스포츠 제외 (위법성 고려)
     timeRemaining: 'all',
     minVolume: 10000,
     minLiquidity: 0
@@ -109,12 +109,30 @@ const categoryEmojis = {
     'default': '📊'
 };
 
+// Category to Color mapping
+const categoryColors = {
+    'Sports': '#3b82f6',      // Blue
+    'Crypto': '#f59e0b',      // Amber
+    'Politics': '#ef4444',    // Red
+    'Pop Culture': '#ec4899', // Pink
+    'Science': '#10b981',     // Green
+    'Business': '#8b5cf6',    // Purple
+    'Technology': '#06b6d4',  // Cyan
+    'Gaming': '#f97316',      // Orange
+    'Finance': '#6366f1',     // Indigo
+    'Music': '#d946ef',       // Fuchsia
+    'Uncategorized': '#6b7280', // Gray
+    'default': '#6b7280'      // Gray
+};
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 앱 시작');
 
     initTheme();
+    initLanguage();
     initSupabase();
+    initColorLegend();
     setupEventListeners();
     await loadData();
     updateActiveFiltersDisplay(); // 기본 필터 UI 표시
@@ -147,6 +165,16 @@ function setupEventListeners() {
             e.preventDefault();
             e.stopPropagation();
             toggleTheme();
+        });
+    }
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleRefresh();
         });
     }
 
@@ -254,6 +282,70 @@ function toggleTheme() {
     localStorage.setItem('theme', newTheme);
 }
 
+function handleRefresh() {
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    // Add rotation animation
+    if (refreshBtn) {
+        refreshBtn.classList.add('rotating');
+    }
+
+    // Re-render calendar to filter out past events
+    const searchQuery = document.getElementById('searchInput').value;
+    renderCalendar(searchQuery);
+
+    // Remove rotation animation after 500ms
+    setTimeout(() => {
+        if (refreshBtn) {
+            refreshBtn.classList.remove('rotating');
+        }
+    }, 500);
+}
+
+function initColorLegend() {
+    const legendGrid = document.getElementById('colorLegendGrid');
+    if (!legendGrid) return;
+
+    // Clear existing content
+    legendGrid.innerHTML = '';
+
+    // Create legend items for each category
+    Object.entries(categoryColors).forEach(([category, color]) => {
+        if (category === 'default') return; // Skip default
+
+        const legendItem = document.createElement('div');
+        legendItem.className = 'color-legend-item';
+        legendItem.innerHTML = `
+            <div class="legend-color-bar" style="background-color: ${color};"></div>
+            <span class="legend-category-name">${category}</span>
+        `;
+        legendGrid.appendChild(legendItem);
+    });
+
+    // Setup toggle functionality
+    const toggleBtn = document.getElementById('colorLegendToggle');
+    const header = document.getElementById('colorLegendHeader');
+    const content = document.getElementById('colorLegendContent');
+    const container = document.getElementById('colorLegendContainer');
+
+    if (toggleBtn && header && content && container) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            container.classList.toggle('collapsed');
+        });
+
+        // 항상 펼쳐진 상태로 유지 (자동 접기 제거)
+    }
+}
+
+function toggleColorLegend() {
+    const container = document.getElementById('colorLegendContainer');
+    if (container) {
+        container.classList.toggle('collapsed');
+    }
+}
+
 async function loadData() {
     console.log('📥 데이터 로드 시작');
 
@@ -267,15 +359,23 @@ async function loadData() {
     }
 
     try {
-        const PAGE_SIZE = 1000;
+        const PAGE_SIZE = 500;
         let allData = [];
         let offset = 0;
         let hasMore = true;
+
+        // 현재 시간부터 30일 후까지만 가져오기 (초기 로딩 속도 개선)
+        const now = new Date().toISOString();
+        const thirtyDaysLater = new Date();
+        thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
+        const maxDate = thirtyDaysLater.toISOString();
 
         while (hasMore) {
             const { data, error } = await supabaseClient
                 .from('poly_events')
                 .select('*')
+                .gte('end_date', now)  // 현재 이후
+                .lte('end_date', maxDate)  // 30일 이내
                 .order('end_date', { ascending: true })
                 .range(offset, offset + PAGE_SIZE - 1);
 
@@ -497,17 +597,20 @@ function applyFilters() {
 function resetFilters() {
     tempFilters = {
         tags: [],
+        excludedCategories: ['Sports'], // 기본적으로 스포츠 제외 유지
         timeRemaining: 'all',
         minVolume: 10000,
         minLiquidity: 0
     };
     renderFilterTags();
+    renderFilterCategories();
     syncFilterUI();
 }
 
 function clearAllFilters() {
     filters = {
         tags: [],
+        excludedCategories: ['Sports'], // 기본적으로 스포츠 제외 유지
         timeRemaining: 'all',
         minVolume: 10000,
         minLiquidity: 0
@@ -529,6 +632,15 @@ function updateActiveFiltersDisplay() {
         const tagEl = document.createElement('span');
         tagEl.className = 'filter-tag';
         tagEl.innerHTML = `${tag} <span class="remove-tag" data-type="tag" data-value="${tag}">×</span>`;
+        container.appendChild(tagEl);
+    });
+
+    // Excluded Categories
+    filters.excludedCategories.forEach(category => {
+        hasFilters = true;
+        const tagEl = document.createElement('span');
+        tagEl.className = 'filter-tag excluded';
+        tagEl.innerHTML = `🚫 ${getTranslatedCategory(category)} <span class="remove-tag" data-type="excludedCategory" data-value="${category}">×</span>`;
         container.appendChild(tagEl);
     });
 
@@ -574,6 +686,8 @@ function updateActiveFiltersDisplay() {
 
             if (type === 'tag') {
                 filters.tags = filters.tags.filter(t => t !== value);
+            } else if (type === 'excludedCategory') {
+                filters.excludedCategories = filters.excludedCategories.filter(c => c !== value);
             } else if (type === 'timeRemaining') {
                 filters.timeRemaining = 'all';
             } else if (type === 'minVolume') {
@@ -779,7 +893,7 @@ function renderWeekView(searchQuery = '') {
     // Week range 업데이트
     const weekStart = new Date(todayKST + 'T00:00:00');
     const weekEnd = new Date(addDays(todayKST, 4) + 'T00:00:00');
-    const weekRangeText = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })}`;
+    const weekRangeText = `${weekStart.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })} - ${weekEnd.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })}`;
     document.getElementById('weekRange').textContent = weekRangeText;
 
     // Week timeline 렌더링
@@ -795,15 +909,16 @@ function renderWeekView(searchQuery = '') {
         dayEl.className = `week-day${isToday ? ' today' : ''}`;
 
         // 날짜 헤더
-        const dayName = date.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Asia/Seoul' });
+        const dayName = date.toLocaleDateString(getLocale(), { weekday: 'short', timeZone: 'Asia/Seoul' });
         const dayNumber = date.getDate();
-        const monthName = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'Asia/Seoul' });
+        const monthName = date.toLocaleDateString(getLocale(), { month: 'short', timeZone: 'Asia/Seoul' });
+        const dayDateText = currentLang === 'ko' ? `${monthName} ${dayNumber}일` : `${monthName} ${dayNumber}`;
 
         dayEl.innerHTML = `
             <div class="week-day-header">
                 <div class="week-day-name">${dayName}</div>
-                <div class="week-day-date">${monthName} ${dayNumber}</div>
-                ${dayEvents.length > 0 ? `<div class="week-event-count">${dayEvents.length} events</div>` : ''}
+                <div class="week-day-date">${dayDateText}</div>
+                ${dayEvents.length > 0 ? `<div class="week-event-count">${dayEvents.length}${translations[currentLang].events}</div>` : ''}
             </div>
             <div class="week-day-events" id="week-${dateKey}"></div>
         `;
@@ -813,7 +928,7 @@ function renderWeekView(searchQuery = '') {
         // 이벤트 렌더링
         const eventsContainer = document.getElementById(`week-${dateKey}`);
         if (dayEvents.length === 0) {
-            eventsContainer.innerHTML = '<div class="week-no-events">No events</div>';
+            eventsContainer.innerHTML = `<div class="week-no-events">${translations[currentLang].noEvents}</div>`;
         } else {
             dayEvents.forEach(event => {
                 const time = getKSTTime(event.end_date);
@@ -827,8 +942,15 @@ function renderWeekView(searchQuery = '') {
                 const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
                 const slugSafe = escapeHtml(event.slug || '');
 
+                // Get category color
+                const category = inferCategory(event);
+                const categoryColor = categoryColors[category] || categoryColors['default'];
+
                 const eventEl = document.createElement('div');
                 eventEl.className = 'week-event';
+                eventEl.style.borderLeftColor = categoryColor;
+                eventEl.setAttribute('data-category', category);
+                eventEl.setAttribute('title', `${event.title} (${getTranslatedCategory(category)})`);
                 eventEl.onclick = () => openEventLink(slugSafe, searchQuery);
                 eventEl.innerHTML = `
                     <div class="week-event-time ${timeClass}">${time}</div>
@@ -880,13 +1002,14 @@ function renderCalendarOverview(searchQuery = '') {
     // Calendar range 업데이트
     const rangeStart = new Date(startDate + 'T00:00:00');
     const rangeEnd = new Date(addDays(startDate, 20) + 'T00:00:00');
-    const rangeText = `${rangeStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })} - ${rangeEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })}`;
+    const rangeText = `${rangeStart.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })} - ${rangeEnd.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', timeZone: 'Asia/Seoul' })}`;
     document.getElementById('calendarRange').textContent = rangeText;
 
     // Calendar days 렌더링
     const daysContainer = document.getElementById('calendarOverviewDays');
     daysContainer.innerHTML = '';
 
+    let previousMonth = null;
     weekDates.forEach(dateKey => {
         const dayEvents = eventsByDate[dateKey] || [];
         const date = new Date(dateKey + 'T00:00:00');
@@ -896,7 +1019,19 @@ function renderCalendarOverview(searchQuery = '') {
         dayEl.className = `calendar-overview-day${isToday ? ' today' : ''}`;
 
         const dayNumber = date.getDate();
+        const currentMonth = date.getMonth();
         const eventCount = dayEvents.length;
+
+        // 월이 바뀌는지 확인 (1일이거나 이전 월과 다를 때)
+        const isNewMonth = previousMonth !== null && previousMonth !== currentMonth;
+        previousMonth = currentMonth;
+
+        // 월 정보 생성 (월이 바뀔 때만)
+        let monthLabel = '';
+        if (isNewMonth || dayNumber === 1) {
+            const monthName = date.toLocaleDateString(getLocale(), { month: 'short', timeZone: 'Asia/Seoul' });
+            monthLabel = `<div class="calendar-overview-month-label">${monthName}</div>`;
+        }
 
         // 거래량 기준으로 정렬하여 상위 3개 선택
         const topEvents = [...dayEvents]
@@ -915,8 +1050,12 @@ function renderCalendarOverview(searchQuery = '') {
                 const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
                 const slugSafe = escapeHtml(event.slug || '');
 
+                // Get category color
+                const category = inferCategory(event);
+                const categoryColor = categoryColors[category] || categoryColors['default'];
+
                 eventsHtml += `
-                    <div class="calendar-overview-event" onclick="event.stopPropagation(); openEventLink('${slugSafe}', '${searchQuery}');" title="${escapeHtml(event.title)}">
+                    <div class="calendar-overview-event" data-category="${category}" style="border-left-color: ${categoryColor};" onclick="event.stopPropagation(); openEventLink('${slugSafe}', '${searchQuery}');" title="${escapeHtml(event.title)} (${getTranslatedCategory(category)})">
                         <img src="${imageUrl}" class="overview-event-image" alt="" onerror="this.style.display='none'">
                         <span class="overview-event-title">${title}</span>
                         <span class="overview-event-prob ${probClass}">${prob}%</span>
@@ -927,9 +1066,10 @@ function renderCalendarOverview(searchQuery = '') {
         }
 
         dayEl.innerHTML = `
+            ${monthLabel}
             <div class="calendar-overview-day-number">${dayNumber}</div>
             ${eventsHtml}
-            ${eventCount > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${eventCount - 3} more</div>` : ''}
+            ${eventCount > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${eventCount - 3} ${translations[currentLang].more}</div>` : ''}
         `;
 
         daysContainer.appendChild(dayEl);
@@ -979,7 +1119,7 @@ function showDayEvents(dateKey) {
     const dayEvents = filtered.filter(e => toKSTDateString(e.end_date) === dateKey);
 
     const date = new Date(dateKey + 'T00:00:00');
-    const dateStr = date.toLocaleDateString('ko-KR', {
+    const dateStr = date.toLocaleDateString(getLocale(), {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -1010,7 +1150,7 @@ function showDayEvents(dateKey) {
             <img src="${imageUrl}" class="modal-event-image" alt="" onerror="this.style.display='none'">
             <div class="modal-event-content">
                 <div class="modal-event-title">${event.title}</div>
-                <div class="modal-event-category">${event.category || 'Uncategorized'}${marketCount > 1 ? ` · ${marketCount} markets` : ''}</div>
+                <div class="modal-event-category">${getTranslatedCategory(event.category || 'Uncategorized')}${marketCount > 1 ? ` · ${marketCount}${translations[currentLang].markets}` : ''}</div>
             </div>
             <span class="modal-event-prob ${probClass}">${prob}%</span>
         `;
@@ -1026,4 +1166,201 @@ function closeModal() {
 
 // Global functions for onclick handlers
 window.openEventLink = openEventLink;
+
+// ============================================================================
+// Language Toggle (한국어/English)
+// ============================================================================
+
+const translations = {
+    ko: {
+        search: '시장 검색...',
+        filters: '필터',
+        clickToAdd: '클릭하여 필터 추가',
+        hideCategories: '카테고리 숨기기',
+        timeRemaining: '남은 시간',
+        minVolume: '최소 거래량',
+        minLiquidity: '최소 유동성',
+        all: '전체',
+        days: '일',
+        dataRangeInfo: '앞으로 30일 이내 이벤트만 표시',
+        refreshTooltip: '과거 이벤트 숨기기',
+        colorLegendTitle: '색상 범례',
+        categories: {
+            'Sports': '스포츠',
+            'Crypto': '암호화폐',
+            'Politics': '정치',
+            'Finance': '금융',
+            'Pop Culture': '대중문화',
+            'Science': '과학',
+            'Uncategorized': '미분류'
+        },
+        markets: '개 시장',
+        events: '개 이벤트',
+        noEvents: '이벤트 없음',
+        more: '더보기',
+        loading: '로딩 중...',
+        noResults: '결과 없음',
+        volume: '거래량',
+        liquidity: '유동성',
+        activeMarkets: '활성 시장',
+        activeMarketsDesc: '현재 활성화된 시장',
+        totalLiquidity: '총 유동성',
+        totalLiquidityDesc: '모든 활성 시장의 유동성',
+        totalVolume: '총 거래량',
+        totalVolumeDesc: '모든 활성 시장의 거래량',
+        avgLiquidity: '평균 유동성',
+        avgLiquidityDesc: '시장당 평균 유동성'
+    },
+    en: {
+        search: 'Search markets...',
+        filters: 'Filters',
+        clickToAdd: 'Click to add filters',
+        hideCategories: 'Hide Categories',
+        timeRemaining: 'Time remaining',
+        minVolume: 'Min Volume',
+        minLiquidity: 'Min Liquidity',
+        all: 'All',
+        days: 'd',
+        dataRangeInfo: 'Showing events within the next 30 days',
+        refreshTooltip: 'Hide past events',
+        colorLegendTitle: 'Color Legend',
+        categories: {
+            'Sports': 'Sports',
+            'Crypto': 'Crypto',
+            'Politics': 'Politics',
+            'Finance': 'Finance',
+            'Pop Culture': 'Pop Culture',
+            'Science': 'Science',
+            'Uncategorized': 'Uncategorized'
+        },
+        markets: ' markets',
+        events: ' events',
+        noEvents: 'No events',
+        more: 'more',
+        loading: 'Loading...',
+        noResults: 'No results',
+        volume: 'Volume',
+        liquidity: 'Liquidity',
+        activeMarkets: 'Active Markets',
+        activeMarketsDesc: 'Currently active markets',
+        totalLiquidity: 'Total Liquidity',
+        totalLiquidityDesc: 'Liquidity across all active markets',
+        totalVolume: 'Total Volume',
+        totalVolumeDesc: 'Volume across all active markets',
+        avgLiquidity: 'Avg Liquidity',
+        avgLiquidityDesc: 'Average liquidity per market'
+    }
+};
+
+let currentLang = localStorage.getItem('language') || 'ko';
+
+function translatePage() {
+    const t = translations[currentLang];
+
+    // Search placeholder
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.placeholder = t.search;
+    }
+
+    // Data range info banner
+    const dataRangeInfo = document.getElementById('dataRangeInfo');
+    if (dataRangeInfo) {
+        dataRangeInfo.textContent = t.dataRangeInfo;
+    }
+
+    // Refresh button tooltip
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.setAttribute('title', t.refreshTooltip);
+    }
+
+    // Color legend title
+    const colorLegendTitle = document.getElementById('colorLegendTitle');
+    if (colorLegendTitle) {
+        colorLegendTitle.textContent = t.colorLegendTitle;
+    }
+
+    // Filter label
+    const filterLabels = document.querySelectorAll('.filter-label');
+    filterLabels.forEach(label => {
+        if (label.textContent.trim().includes('Filter')) {
+            const svg = label.querySelector('svg');
+            label.textContent = t.filters;
+            if (svg) label.prepend(svg);
+        }
+    });
+
+    // Filter placeholder
+    const filterPlaceholder = document.querySelector('.filter-placeholder');
+    if (filterPlaceholder) {
+        filterPlaceholder.textContent = t.clickToAdd;
+    }
+
+    // Update category names in calendar
+    document.querySelectorAll('.category-label').forEach(el => {
+        const originalCategory = el.getAttribute('data-category');
+        if (originalCategory && t.categories[originalCategory]) {
+            el.textContent = t.categories[originalCategory];
+        }
+    });
+
+    // Update stat cards
+    const statLabels = document.querySelectorAll('.stat-label');
+    const statDescs = document.querySelectorAll('.stat-desc');
+
+    if (statLabels[0]) statLabels[0].textContent = t.activeMarkets;
+    if (statDescs[0]) statDescs[0].textContent = t.activeMarketsDesc;
+
+    if (statLabels[1]) statLabels[1].textContent = t.totalLiquidity;
+    if (statDescs[1]) statDescs[1].textContent = t.totalLiquidityDesc;
+
+    if (statLabels[2]) statLabels[2].textContent = t.totalVolume;
+    if (statDescs[2]) statDescs[2].textContent = t.totalVolumeDesc;
+
+    if (statLabels[3]) statLabels[3].textContent = t.avgLiquidity;
+    if (statDescs[3]) statDescs[3].textContent = t.avgLiquidityDesc;
+
+    // Update language toggle button
+    const langToggle = document.getElementById('langToggle');
+    if (langToggle) {
+        langToggle.querySelector('.lang-text').textContent = currentLang.toUpperCase();
+    }
+
+    // Re-render calendar to update translated categories
+    if (typeof renderCalendar === 'function') {
+        renderCalendar();
+    }
+}
+
+function getLocale() {
+    return currentLang === 'ko' ? 'ko-KR' : 'en-US';
+}
+
+function toggleLanguage() {
+    currentLang = currentLang === 'ko' ? 'en' : 'ko';
+    localStorage.setItem('language', currentLang);
+    translatePage();
+}
+
+// Initialize language
+function initLanguage() {
+    translatePage();
+
+    const langToggle = document.getElementById('langToggle');
+    if (langToggle) {
+        langToggle.addEventListener('click', toggleLanguage);
+    }
+}
+
+// Helper function to get translated category name
+function getTranslatedCategory(category) {
+    const t = translations[currentLang];
+    return t.categories[category] || category;
+}
+
+// Export for use in rendering functions
+window.getCurrentLang = () => currentLang;
+window.getTranslation = (key) => translations[currentLang][key] || key;
+window.getTranslatedCategory = getTranslatedCategory;
 window.showDayEvents = showDayEvents;

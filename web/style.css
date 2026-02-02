@@ -134,6 +134,126 @@ body {
     color: var(--text-muted);
 }
 
+/* Info Banner */
+.info-banner {
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent-blue);
+    font-size: 14px;
+}
+
+.info-banner svg {
+    flex-shrink: 0;
+}
+
+/* Color Legend */
+.color-legend-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: all 0.3s ease-in-out;
+}
+
+.color-legend-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-tertiary);
+    transition: background-color 0.2s;
+}
+
+.color-legend-header:hover {
+    background: var(--bg-card);
+}
+
+.color-legend-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.color-legend-toggle {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease-in-out;
+}
+
+.color-legend-toggle:hover {
+    color: var(--text-primary);
+}
+
+.legend-chevron {
+    transition: transform 0.3s ease-in-out;
+}
+
+.color-legend-container.collapsed .legend-chevron {
+    transform: rotate(-90deg);
+}
+
+.color-legend-content {
+    max-height: 200px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out;
+    padding: 12px 16px;
+}
+
+.color-legend-container.collapsed .color-legend-content {
+    max-height: 0;
+    padding: 0 16px;
+}
+
+.color-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.color-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+    cursor: default;
+}
+
+.color-legend-item:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(2px);
+}
+
+.legend-color-bar {
+    width: 4px;
+    height: 20px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.legend-category-name {
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
 /* Toolbar */
 .toolbar {
     display: flex;
@@ -170,6 +290,32 @@ body {
 .icon-btn:hover {
     background: var(--bg-card);
     color: var(--text-primary);
+}
+
+/* Refresh Button Animation */
+.icon-btn.rotating svg {
+    animation: rotate 0.5s ease-in-out;
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Language Toggle */
+.lang-toggle {
+    min-width: 48px;
+    justify-content: center;
+}
+
+.lang-text {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
 /* Search */
@@ -257,6 +403,10 @@ body {
     border-radius: 16px;
     font-size: 12px;
     font-weight: 500;
+}
+
+.filter-tag.excluded {
+    background: var(--accent-red);
 }
 
 .filter-tag .remove-tag {
@@ -641,14 +791,14 @@ body {
     padding: 10px;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: all 0.2s;
-    border-left: 3px solid transparent;
+    transition: all 0.2s ease-in-out;
+    border-left: 4px solid var(--accent-blue);
 }
 
 .week-event:hover {
     background: var(--bg-card);
-    transform: translateX(2px);
-    border-left-color: var(--accent-blue);
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .week-event-time {
@@ -819,6 +969,15 @@ body {
     background: var(--bg-primary);
 }
 
+.calendar-overview-month-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    letter-spacing: 0.5px;
+}
+
 .calendar-overview-day-number {
     font-size: 13px;
     font-weight: 500;
@@ -846,12 +1005,14 @@ body {
     border-radius: 4px;
     font-size: 11px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s ease-in-out;
     min-width: 0;
+    border-left: 3px solid var(--accent-blue);
 }
 
 .calendar-overview-event:hover {
     background: var(--bg-card);
+    transform: translateX(2px);
 }
 
 .overview-event-image {

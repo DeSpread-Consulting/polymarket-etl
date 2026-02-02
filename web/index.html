@@ -68,6 +68,33 @@
             </div>
         </div>
 
+        <!-- Data Range Info Banner -->
+        <div class="info-banner">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span id="dataRangeInfo">Showing events within the next 30 days</span>
+        </div>
+
+        <!-- Color Legend -->
+        <div class="color-legend-container" id="colorLegendContainer">
+            <div class="color-legend-header" id="colorLegendHeader">
+                <span class="color-legend-title" id="colorLegendTitle">색상 범례</span>
+                <button class="color-legend-toggle" id="colorLegendToggle">
+                    <svg class="legend-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+            </div>
+            <div class="color-legend-content" id="colorLegendContent">
+                <div class="color-legend-grid" id="colorLegendGrid">
+                    <!-- Legend items will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
         <!-- Toolbar -->
         <div class="toolbar">
             <div class="toolbar-left">
@@ -98,6 +125,18 @@
                         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                     </svg>
                 </button>
+                <!-- Language Toggle -->
+                <button class="icon-btn lang-toggle" id="langToggle" title="한국어 / English">
+                    <span class="lang-text">KO</span>
+                </button>
+                <!-- Refresh Button -->
+                <button class="icon-btn" id="refreshBtn" title="Refresh Calendar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                </button>
             </div>
         </div>
 
@@ -118,7 +157,7 @@
         <!-- Week View Section -->
         <div class="week-section">
             <div class="week-header">
-                <h2 class="week-title">5일 기준 마감 이벤트</h2>
+                <h2 class="week-title">이번 주 일정</h2>
                 <span class="week-range" id="weekRange">Jan 28 - Feb 3</span>
             </div>
             <div class="week-timeline" id="weekTimeline">
