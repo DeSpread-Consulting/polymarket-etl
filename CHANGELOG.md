@@ -1,5 +1,207 @@
 # 변경 이력
 
+## 2026-02-03
+
+### UI/UX 디자인 시스템 전면 개편
+
+#### 파일: `web/index.html`, `web/style.css`
+
+**주요 변경사항**:
+1. **Hero 섹션 추가**: 페이지 상단에 브랜드 아이덴티티 강화
+2. **디자인 시스템 현대화**: 폰트, 색상, 그라디언트, 섀도우 전면 개편
+3. **시각적 효과 추가**: 배경 글로우, 호버 애니메이션, 반응형 개선
+
+---
+
+#### 1. Hero 섹션 추가 (`web/index.html`)
+
+**추가된 HTML**:
+```html
+<!-- Hero -->
+<div class="page-hero">
+    <div class="hero-text">
+        <div class="hero-eyebrow">Polymarket Community</div>
+        <h1 class="hero-title">Event Calendar</h1>
+        <p class="hero-subtitle">다가오는 마감과 주요 이벤트를 한눈에 확인하세요.</p>
+    </div>
+    <div class="hero-badge">
+        <span class="hero-badge-label">Live</span>
+        <span class="hero-badge-dot"></span>
+    </div>
+</div>
+```
+
+**효과**:
+- 브랜드 아이덴티티 강화 (Polymarket Community)
+- 실시간 업데이트 상태 표시 (Live 배지)
+- 페이지 목적을 명확히 전달
+
+---
+
+#### 2. 폰트 시스템 개선 (`web/style.css`)
+
+**추가된 폰트**:
+```css
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+body {
+    font-family: 'IBM Plex Sans', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+}
+
+.hero-title, .week-title, .calendar-overview-title {
+    font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+}
+
+.week-event-time {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+```
+
+**효과**:
+- **IBM Plex Sans**: 본문 텍스트 (가독성 우수)
+- **Space Grotesk**: 제목/헤딩 (모던하고 강렬)
+- **JetBrains Mono**: 시간 표시 (고정폭 폰트로 정렬 깔끔)
+
+---
+
+#### 3. 색상 팔레트 재설계
+
+**다크 테마 색상 변경**:
+```css
+/* 변경 전 */
+--bg-primary: #0d1117;
+--accent-blue: #58a6ff;
+
+/* 변경 후 */
+--bg-primary: #0b0d11;        /* 더 어두운 배경 */
+--accent-blue: #4ea1ff;        /* 더 선명한 파란색 */
+--accent-green: #38d39f;       /* 민트 그린 */
+--accent-yellow: #f4b740;      /* 골드 옐로우 */
+```
+
+**추가된 CSS 변수**:
+```css
+:root {
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 6px 16px rgba(15, 23, 42, 0.15);
+    --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.2);
+    --ring: 0 0 0 3px rgba(78, 161, 255, 0.2);
+    --bg-glow: rgba(78, 161, 255, 0.08);
+    --bg-glow-2: rgba(56, 211, 159, 0.08);
+}
+```
+
+**효과**: 일관된 디자인 언어, 유지보수 용이
+
+---
+
+#### 4. 배경 글로우 효과 추가
+
+**추가된 배경 효과**:
+```css
+body::before {
+    background:
+        radial-gradient(800px circle at 10% 10%, var(--bg-glow), transparent 55%),
+        radial-gradient(900px circle at 90% 15%, var(--bg-glow-2), transparent 60%),
+        radial-gradient(1000px circle at 50% 90%, rgba(148, 163, 184, 0.06), transparent 65%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.12));
+}
+
+body::after {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.02) 0,
+        rgba(255, 255, 255, 0.02) 1px,
+        transparent 1px,
+        transparent 6px
+    );
+    opacity: 0.6;
+}
+```
+
+**효과**:
+- 부드러운 그라디언트 배경
+- 깊이감 있는 레이어링
+- 현대적인 느낌 (Glassmorphism 트렌드)
+
+---
+
+#### 5. 컴포넌트 스타일 개선
+
+**그라디언트 효과 추가**:
+```css
+/* Hero */
+.page-hero {
+    background: linear-gradient(135deg, rgba(78, 161, 255, 0.16), rgba(56, 211, 159, 0.12));
+    box-shadow: 0 12px 32px rgba(6, 12, 24, 0.25);
+}
+
+/* Info Banner */
+.info-banner {
+    background: linear-gradient(135deg, rgba(78, 161, 255, 0.18), rgba(52, 210, 224, 0.12));
+    backdrop-filter: blur(8px);
+}
+
+/* Week Section */
+.week-section {
+    box-shadow: var(--shadow-md);
+}
+
+.week-event {
+    background: linear-gradient(135deg, rgba(27, 34, 48, 0.95), rgba(21, 26, 36, 0.9));
+    box-shadow: 0 6px 18px rgba(6, 12, 24, 0.2);
+}
+
+.week-event:hover {
+    transform: translateX(6px);
+    box-shadow: 0 10px 20px rgba(6, 12, 24, 0.25);
+}
+```
+
+**효과**:
+- 깊이감 있는 카드 디자인
+- 부드러운 호버 애니메이션
+- 전문적이고 현대적인 느낌
+
+---
+
+#### 6. 반응형 디자인 개선
+
+**모바일 최적화**:
+```css
+@media (max-width: 768px) {
+    .page-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .hero-title {
+        font-size: 24px;
+    }
+}
+```
+
+**효과**: 모바일 디바이스에서도 깔끔한 레이아웃
+
+---
+
+### 변경된 파일
+- `web/index.html`: Hero 섹션 추가 (+13줄)
+- `web/style.css`: 디자인 시스템 전면 개편 (+264줄, -79줄)
+
+### 시각적 개선 요약
+- ✅ **폰트**: IBM Plex Sans, Space Grotesk, JetBrains Mono
+- ✅ **색상**: 더 선명하고 세련된 팔레트
+- ✅ **배경**: 그라디언트 글로우 효과
+- ✅ **컴포넌트**: 그라디언트, 섀도우, 호버 애니메이션
+- ✅ **반응형**: 모바일 최적화
+- ✅ **브랜딩**: Hero 섹션으로 아이덴티티 강화
+
+---
+
 ## 2026-01-29
 
 ### 평소 운영 모드로 복귀
