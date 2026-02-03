@@ -520,7 +520,6 @@ async function loadData() {
         allEvents = generateDemoData();
         extractTags();
         extractCategories();
-        updateStats();
         return;
     }
 
@@ -561,12 +560,10 @@ async function loadData() {
         allEvents = allData;
         extractTags();
         extractCategories();
-        updateStats();
     } catch (error) {
         console.error('❌ 데이터 로드 실패:', error);
         allEvents = generateDemoData();
         extractTags();
-        updateStats();
     }
 }
 
@@ -652,16 +649,6 @@ function generateDemoData() {
     return demoEvents;
 }
 
-function updateStats() {
-    const activeMarkets = allEvents.length;
-    const totalVolume = allEvents.reduce((sum, e) => sum + (parseFloat(e.volume) || 0), 0);
-    const volume24hr = allEvents.reduce((sum, e) => sum + (parseFloat(e.volume_24hr) || 0), 0);
-
-    document.getElementById('activeMarkets').textContent = formatNumber(activeMarkets);
-    document.getElementById('totalVolume').textContent = formatCurrency(totalVolume);
-    document.getElementById('volume24hr').textContent = formatCurrency(volume24hr);
-    document.getElementById('totalLiquidity').textContent = formatCurrency(totalVolume * 0.1);
-}
 
 function formatNumber(num) {
     return new Intl.NumberFormat().format(num);
@@ -1502,22 +1489,6 @@ function translatePage() {
             el.textContent = t.categories[originalCategory];
         }
     });
-
-    // Update stat cards
-    const statLabels = document.querySelectorAll('.stat-label');
-    const statDescs = document.querySelectorAll('.stat-desc');
-
-    if (statLabels[0]) statLabels[0].textContent = t.activeMarkets;
-    if (statDescs[0]) statDescs[0].textContent = t.activeMarketsDesc;
-
-    if (statLabels[1]) statLabels[1].textContent = t.totalLiquidity;
-    if (statDescs[1]) statDescs[1].textContent = t.totalLiquidityDesc;
-
-    if (statLabels[2]) statLabels[2].textContent = t.totalVolume;
-    if (statDescs[2]) statDescs[2].textContent = t.totalVolumeDesc;
-
-    if (statLabels[3]) statLabels[3].textContent = t.avgLiquidity;
-    if (statDescs[3]) statDescs[3].textContent = t.avgLiquidityDesc;
 
     // Update language toggle button
     const langToggle = document.getElementById('langToggle');
