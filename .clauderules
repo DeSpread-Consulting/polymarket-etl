@@ -47,3 +47,18 @@ Polymarket API → Supabase → Web (Vanilla JS)
 - 필드: id, title, slug, end_date, volume, probs, image_url, category, tags
 - 그룹화: 동일 slug 합산 (`groupEventsBySlug`)
 - 시간: UTC → KST 변환
+
+## Database (Supabase)
+- Supabase `.select()`는 기본 1000행만 반환. 대규모 조회 시 range 기반 페이지네이션 또는 RPC 사용 필수
+- 서버 사이드 필터 (.neq(), .eq()) 적용 전 컬럼 타입 호환성 확인. 쿼리 에러 시 클라이언트 사이드 필터링으로 폴백. 커밋 전 반드시 테스트
+- 대규모 배치 작업 (API 호출, 데이터 처리) 시 레이트 리밋, 지수 백오프, 진행 상황 리포팅을 처음부터 구현할 것 (실패 후가 아니라)
+
+## JavaScript / Frontend
+- 이벤트 리스너 (특히 DOMContentLoaded) 추가 시 파일에 이미 존재하는지 반드시 확인. 중복 핸들러 절대 금지
+- 필터 추가나 데이터 가시성 변경은 명시적 사용자 승인 없이 절대 하지 말 것. 확률 필터 등 데이터를 몰래 숨기는 행위 금지. 필터를 제안할 때는 먼저 설명하고 확인을 기다릴 것
+
+## Deployment (Vercel)
+- Vercel 배포 이슈 디버깅 시: Root Directory 설정, 환경 변수, 빌드 설정을 .gitignore보다 먼저 확인. Git에 이미 추적 중인 파일은 .gitignore 영향을 받지 않음
+
+## Debugging
+- 로컬 서버/프로세스 실행 여부 확인 시 `lsof -i :<port>` 또는 `curl localhost:<port>` 사용. 프로세스 이름만으로 판단하지 말 것. 상태 보고 전 반드시 결과 확인
