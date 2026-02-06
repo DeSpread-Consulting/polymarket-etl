@@ -881,42 +881,6 @@ function extractEventGroupKey(title) {
     return normalized;
 }
 
-// 제목 기준으로 이벤트 그룹화 - 가장 거래량 높은 마켓만 선택
-function groupEventsBySlug(events) {
-    const titleGroups = {};
-
-    events.forEach(event => {
-        // 제목에서 그룹 키 추출 (숫자 제거)
-        const groupKey = extractEventGroupKey(event.title);
-        if (!titleGroups[groupKey]) {
-            titleGroups[groupKey] = [];
-        }
-        titleGroups[groupKey].push(event);
-    });
-
-    // 각 그룹에서 가장 거래량이 높은 마켓 선택
-    const groupedEvents = [];
-    Object.entries(titleGroups).forEach(([groupKey, markets]) => {
-        if (markets.length === 1) {
-            // 마켓이 1개면 그대로 사용
-            groupedEvents.push(markets[0]);
-        } else {
-            // 여러 마켓이 있으면 거래량 기준 정렬 후 가장 높은 것 선택
-            markets.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0));
-            const topMarket = { ...markets[0] };
-            // 그룹 내 마켓 수 표시용
-            topMarket._marketCount = markets.length;
-            // 그룹 전체 거래량 합산
-            topMarket._totalVolume = markets.reduce((sum, m) => sum + (parseFloat(m.volume) || 0), 0);
-            // 검색용 키워드 저장 (그룹화된 제목에서 공통 부분 추출)
-            topMarket._searchQuery = extractSearchQuery(markets[0].title);
-            groupedEvents.push(topMarket);
-        }
-    });
-
-    return groupedEvents;
-}
-
 // 검색 쿼리용 제목 추출 (핵심 키워드만)
 function extractSearchQuery(title) {
     if (!title) return '';
@@ -936,7 +900,7 @@ function extractSearchQuery(title) {
     return query;
 }
 
-function getFilteredEvents(searchQuery = '', applyGrouping = true) {
+function getFilteredEvents(searchQuery = '') {
     let filtered = [...allEvents];
     const now = new Date();
 
@@ -988,11 +952,6 @@ function getFilteredEvents(searchQuery = '', applyGrouping = true) {
             e.title?.toLowerCase().includes(query) ||
             e.category?.toLowerCase().includes(query)
         );
-    }
-
-    // slug 기준 그룹화 적용
-    if (applyGrouping) {
-        filtered = groupEventsBySlug(filtered);
     }
 
     return filtered;
@@ -1091,10 +1050,7 @@ function renderWeekView(searchQuery = '') {
                 const imageUrl = event.image_url || '';
                 const prob = getMainProb(event);
                 const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
-                const volume = formatCurrency(event._totalVolume || event.volume);
-                const marketCount = event._marketCount || 1;
-                const marketCountBadge = marketCount > 1 ? `<span class="market-count-badge">${marketCount}</span>` : '';
-                const searchQuery = event._searchQuery ? escapeHtml(event._searchQuery) : '';
+                const volume = formatCurrency(event.volume);
                 const slugSafe = escapeHtml(event.slug || '');
 
                 // Get category color
@@ -1105,7 +1061,7 @@ function renderWeekView(searchQuery = '') {
                 eventEl.className = 'week-event';
                 eventEl.style.borderLeftColor = categoryColor;
                 eventEl.setAttribute('data-category', category);
-                eventEl.onclick = () => openEventLink(slugSafe, searchQuery);
+                eventEl.onclick = () => openEventLink(slugSafe, '');
 
                 // Add hover event listeners for tooltip
                 eventEl.addEventListener('mouseenter', (e) => showEventTooltip(e, event));
@@ -1117,7 +1073,7 @@ function renderWeekView(searchQuery = '') {
                     <div class="week-event-content">
                         <div class="week-event-header">
                             <img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
-                            <span class="week-event-title">${event.title}${marketCountBadge}</span>
+                            <span class="week-event-title">${event.title}</span>
                             <button class="event-link-btn" onclick="event.stopPropagation(); window.open('https://polymarket.com/event/${slugSafe}', '_blank');" title="Open in Polymarket">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -1132,6 +1088,7 @@ function renderWeekView(searchQuery = '') {
                         </div>
                     </div>
                 `;
+
                 eventsContainer.appendChild(eventEl);
             });
         }
