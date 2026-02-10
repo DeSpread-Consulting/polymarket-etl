@@ -1212,19 +1212,29 @@ function openEventLink(slug, searchQuery) {
         const encoded = encodeURIComponent(searchQuery);
         window.open(`https://polymarket.com/markets?_q=${encoded}`, '_blank');
     } else if (slug) {
-        // 온도 시장과 같이 날짜-옵션 패턴을 가진 slug 정규화
-        // 예: "highest-temperature-in-seattle-on-february-10-2026-41forbelow"
-        //  → "highest-temperature-in-seattle-on-february-10-2026"
+        // 그룹 이벤트의 개별 옵션이 slug에 포함된 경우 정규화
+        // 예1: "highest-temperature-in-seattle-on-february-10-2026-41forbelow"
+        //   → "highest-temperature-in-seattle-on-february-10-2026"
+        // 예2: "elon-musk-of-tweets-february-3-february-10-380-399"
+        //   → "elon-musk-of-tweets-february-3-february-10"
         let normalizedSlug = slug;
 
-        // 온도 범위 패턴 감지 및 제거
-        // Fahrenheit: -41forbelow, -42-43f, -52forhigher
-        // Celsius: -0c, -1c, -14corhigher, -35corbelow, -36c
-        // 패턴: YYYY-[온도값][단위][옵션?]
+        // 패턴 1: 온도 시장 (연도-온도값[단위][옵션])
+        // Fahrenheit: -2026-41forbelow, -2026-42-43f, -2026-52forhigher
+        // Celsius: -2026-0c, -2026-1c, -2026-14corhigher, -2026-35corbelow
         const tempRangePattern = /-(\d{4})-\d+-?\d*[cf](?:orhigher|orbelow)?$/;
+
+        // 패턴 2: 숫자 범위 시장 (날짜-숫자범위)
+        // 예: -february-10-380-399, -december-16-260-279
+        // 주의: 날짜 부분은 유지하고 마지막 숫자 범위만 제거
+        const numericRangePattern = /-(\d+-\d+)$/;
+
         if (tempRangePattern.test(slug)) {
-            // 온도 범위 부분 제거 (날짜까지만 유지)
+            // 온도 범위 부분 제거 (연도까지만 유지)
             normalizedSlug = slug.replace(tempRangePattern, '-$1');
+        } else if (numericRangePattern.test(slug)) {
+            // 숫자 범위 부분 제거
+            normalizedSlug = slug.replace(numericRangePattern, '');
         }
 
         // 단일 마켓은 직접 링크
