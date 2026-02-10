@@ -78,12 +78,12 @@ let currentDate = new Date();
 let calendarOverviewStartWeek = 0; // 0 = Week View 직후부터, 1 = 1주 더 뒤, etc.
 let isLoadingMore = false; // 추가 데이터 로딩 중 플래그
 
-// Filter state (기본값: 거래량 $10K 이상, 스포츠 카테고리 제외)
+// Filter state (기본값: 거래량 $1K 이상, 스포츠 카테고리 제외)
 let filters = {
     tags: [],
     excludedCategories: ['Sports'], // 기본적으로 스포츠 제외 (위법성 고려)
     timeRemaining: 'all',
-    minVolume: 10000,
+    minVolume: 1000, // $1K로 낮춰서 암호화폐 시장 포함
     minLiquidity: 0
 };
 
@@ -660,7 +660,7 @@ async function loadData() {
                 .select('id, title, slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
                 .gte('end_date', now)  // 현재 이후
                 .lte('end_date', maxDate)  // 5일 이내
-                .gte('volume', 10000)  // 서버 레벨 필터링 (거래량 $10K 이상)
+                .gte('volume', 1000)  // 서버 레벨 필터링 (거래량 $1K 이상, 암호화폐 포함)
                 .order('end_date', { ascending: true })
                 .range(offset, offset + PAGE_SIZE - 1);
 
@@ -766,7 +766,7 @@ async function loadMoreData(targetDate) {
             .select('id, title, slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
             .gte('end_date', startDate)
             .lte('end_date', targetDate)
-            .gte('volume', 10000)
+            .gte('volume', 1000)  // $1K 이상 (암호화폐 포함)
             .order('end_date', { ascending: true })
             .limit(1000);
 
