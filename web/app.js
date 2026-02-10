@@ -1212,8 +1212,23 @@ function openEventLink(slug, searchQuery) {
         const encoded = encodeURIComponent(searchQuery);
         window.open(`https://polymarket.com/markets?_q=${encoded}`, '_blank');
     } else if (slug) {
+        // 온도 시장과 같이 날짜-옵션 패턴을 가진 slug 정규화
+        // 예: "highest-temperature-in-seattle-on-february-10-2026-41forbelow"
+        //  → "highest-temperature-in-seattle-on-february-10-2026"
+        let normalizedSlug = slug;
+
+        // 온도 범위 패턴 감지 및 제거
+        // Fahrenheit: -41forbelow, -42-43f, -52forhigher
+        // Celsius: -0c, -1c, -14corhigher, -35corbelow, -36c
+        // 패턴: YYYY-[온도값][단위][옵션?]
+        const tempRangePattern = /-(\d{4})-\d+-?\d*[cf](?:orhigher|orbelow)?$/;
+        if (tempRangePattern.test(slug)) {
+            // 온도 범위 부분 제거 (날짜까지만 유지)
+            normalizedSlug = slug.replace(tempRangePattern, '-$1');
+        }
+
         // 단일 마켓은 직접 링크
-        window.open(`https://polymarket.com/event/${slug}`, '_blank');
+        window.open(`https://polymarket.com/event/${normalizedSlug}`, '_blank');
     }
 }
 
