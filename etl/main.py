@@ -268,10 +268,18 @@ def transform_data(raw_data: list[dict]) -> list[dict]:
             tags  # 태그도 전달
         )
 
+        # event_slug 추출: 그룹 이벤트의 slug (개별 slug와 다를 수 있음)
+        # polymarket.com/event/{event_slug}로 접근해야 정상 작동
+        events = item.get("events")
+        event_slug = None
+        if events and isinstance(events, list) and len(events) > 0:
+            event_slug = events[0].get("slug")
+
         record = {
             "id": item.get("conditionId"),
             "title": item.get("question"),
             "slug": item.get("slug"),
+            "event_slug": event_slug,
             "end_date": item.get("endDate"),
             "api_created_at": item.get("createdAt"),
             "volume": safe_float(item.get("volume")),

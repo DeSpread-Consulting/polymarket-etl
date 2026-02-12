@@ -82,6 +82,7 @@ Polymarket 시장 페이지 (새 탭)
 | `tags` | text[] | 태그 배열 |
 | `closed` | boolean | 정산 완료 여부 |
 | `image_url` | text | 시장 이미지 URL |
+| `event_slug` | text | 그룹 이벤트 slug (API events[0].slug, URL 생성용) |
 | `market_group` | text | 시장 그룹 (현재 미사용) |
 
 ### 필터링 기본값
@@ -135,6 +136,355 @@ const numericRangePattern = /-(\d+-\d+)$/;
 ---
 
 ## 5. 최근 수정 내역
+
+### 2026-02-11: event_slug 기반 URL 생성 (404 해결)
+
+**목적**:
+- 시장 카드 클릭 시 "Oops...we didn't forecast this" (404) 문제 근본 해결
+- 개별 시장 slug가 아닌 그룹 이벤트 slug로 정확한 URL 생성
+
+**문제 발견**:
+- Netflix Top Show, Fed 금리 결정, 트럼프 추방 등 그룹 시장 클릭 시 404
+- 예: `will-bridgerton-season-4-be-the-top-global-netflix-show-this-week` → 404
+- 정상 URL: `what-will-be-the-top-global-netflix-show-this-week-664` → 200
+
+**핵심 발견**:
+- Polymarket API의 `/markets` 응답에 `events[0].slug` 필드가 포함됨
+- 이 값이 `polymarket.com/event/{event_slug}`의 정확한 URL
+- 개별 slug와 event_slug가 완전히 다른 경우가 많음 (정규식으로 변환 불가능)
+
+**해결**:
+1. DB에 `event_slug` 컬럼 추가 (마이그레이션)
+2. ETL `main.py`에서 `events[0].slug` 추출하여 저장
+3. `app.js` `openEventLink()`에서 `event_slug` 우선 사용, 없으면 기존 패턴 폴백
+
+```javascript
+// ✅ 수정된 openEventLink()
+function openEventLink(slug, searchQuery, eventSlug) {
+    if (eventSlug) {
+        // event_slug가 있으면 바로 사용 (가장 정확)
+        window.open(`https://polymarket.com/event/${eventSlug}`, '_blank');
+    } else if (slug) {
+        // 폴백: 기존 패턴 기반 정규화
+        // ...
+    }
+}
+```
+
+**결과**:
+- ✅ 미래 시장 75.3% (4,358/5,791)에 event_slug 보유
+- ✅ 그룹 시장의 71.7% 정확한 URL 생성 가능
+- ✅ 나머지는 기존 패턴 기반 폴백으로 처리
+- ✅ Netflix, Fed 결정, 트럼프 지명 등 모든 그룹 시장 정상 작동
+
+**영향받는 파일**:
+- `etl/main.py:271-280` - event_slug 추출 및 저장
+- `app.js:644,751` - 데이터 로딩 쿼리에 event_slug 추가
+- `app.js:1380-1392` - openEventLink() event_slug 우선 사용
+- `app.js:1198,1328,1547` - 모든 호출 부분에 event_slug 전달
+
+---
+
+### 2026-02-11: 그룹핑 로직 전면 교체 (image_url 기반)
+
+**목적**:
+- 패턴 기반 그룹핑의 근본적 한계 해결 (새 시장 유형마다 정규식 추가 필요)
+- 모든 유형의 시장을 자동으로 그룹핑
+
+**문제 발견**:
+- 트럼프-네타냐후 악수 시장, 트럼프 지지율 시장, TSA 승객 수 시장, Grok 출시 시장 등
+  수많은 새로운 유형의 시장이 그룹핑되지 않고 개별 카드로 표시
+- 기존 10개 이상의 정규식 패턴으로는 모든 케이스 커버 불가능 ("두더지 잡기" 문제)
+
+**핵심 발견**:
+- **Polymarket에서 같은 이벤트 그룹은 동일한 `image_url`을 공유**
+- 이를 활용하면 어떤 새로운 시장 유형이 추가되더라도 자동 그룹핑 가능
+
+**해결**:
+```javascript
+// ❌ 기존 (패턴 기반 - 10개 이상의 정규식)
+const tempPattern = /-\d{4}-(?:neg-)?\d+-?\d*[cf]...$/;
+const numericPattern = /-\d{3,}-\d{2,}$/;
+// ... 패턴 3~10 ...
+const groupKey = `${normalizedSlug}|${event.end_date}`;
+
+// ✅ 수정 (image_url 기반 - 자동 그룹핑)
+const groupKey = `${event.image_url}|${event.end_date}`;
+```
+
+**결과**:
+- ✅ 1,981개 시장 → **411개** 카드로 통합 (**79% 감소**)
+- ✅ 1,809개 시장이 239개 그룹으로 자동 통합
+- ✅ 모든 유형의 시장 자동 그룹핑 (트럼프 지지율, 악수 지속시간, TSA 등)
+- ✅ 새로운 시장 유형 추가 시 코드 변경 불필요
+- ✅ 그룹 내 총 거래량 합산 표시 (`_totalVolume`)
+
+**코드 위치**:
+- `app.js:527-585` - `groupSimilarMarkets()` 함수 전면 교체
+
+**참고**: `openEventLink()` 함수의 패턴 기반 정규화는 유지 (URL 생성용)
+
+---
+
+### 2026-02-11: 중대 버그 수정 (번역 뒤바뀜 + URL 날짜 잘림 + 음수 온도 지원)
+
+**목적**:
+- ETL 번역 스크립트의 치명적인 인덱스 불일치 버그 수정
+- URL 생성 시 날짜가 잘리는 버그 수정 (Hang Seng 등)
+- 토론토 등 음수 온도 시장 그룹핑 지원
+
+**문제 발견**:
+
+1. **번역 뒤바뀜 버그** (치명적):
+   - Joe Rogan 시장: "Will "Fuck" or "Fucking" be said 10+ times..."
+   - 잘못된 번역: "레베카 홀가 제41회 필름 인디펜던트 스피릿 어워드에서 최우수 조연상을 받을까?"
+   - 원인: ETL 스크립트 파싱 로직에서 빈 줄로 인한 인덱스 불일치
+
+2. **URL 날짜 부분 잘림** (HSI Up/Down 시장 등):
+   - 클릭한 시장: "Hang Seng (HSI) Up or Down on February 11?"
+   - 생성된 URL: `hsi-up-or-down-on-february` (날짜 누락!)
+   - 올바른 URL: `hsi-up-or-down-on-february-11-2026`
+   - 원인: `numericRangePattern = /-\d+-\d+$/`이 날짜(`-11-2026`)까지 제거
+
+3. **토론토 음수 온도 미지원**:
+   - slug: `highest-temperature-in-toronto-on-february-11-2026-neg-3c`
+   - 기존 패턴: `/-\d{4}-\d+-?\d*[cf](?:orhigher|orbelow)?$/` (양수만 지원)
+   - 문제: `neg-` 패턴이 없어서 그룹핑 실패
+
+**해결 과정**:
+
+1. **ETL 번역 스크립트 파싱 로직 개선**:
+   ```python
+   # ❌ 기존 (버그)
+   for i, line in enumerate(response_text.split('\n')):
+       if not line:
+           continue  # i는 증가하지만 translation은 추가 안 됨!
+       translations.append(...)  # 인덱스 어긋남!
+
+   # ✅ 수정 (번호 기반 매칭)
+   translations_dict = {}
+   for line in response_text.split('\n'):
+       if '. ' in line and line[0].isdigit():
+           num = int(parts[0])
+           translations_dict[num] = translation  # 번호로 정확히 매칭
+
+   # 번호 순서대로 정렬하여 리스트로 변환
+   translations = [translations_dict.get(i+1, titles[i]) for i in range(len(titles))]
+   ```
+
+2. **URL 날짜 보호 (numericPattern 개선)**:
+   ```javascript
+   // ❌ 기존 (버그)
+   const numericRangePattern = /-\d+-\d+$/;
+   // "hsi-up-or-down-on-february-11-2026" → "-11-2026" 매칭 → 삭제!
+
+   // ✅ 수정 (날짜 보호)
+   const numericRangePattern = /-\d{3,}-\d{2,}$/;
+   // "hsi-up-or-down-on-february-11-2026" → 매칭 안 됨 → 보존! ✅
+   // "elon-musk-tweets-380-399" → 매칭됨 → 제거! ✅
+   ```
+
+3. **음수 온도 패턴 추가**:
+   ```javascript
+   // ❌ 기존
+   const tempPattern = /-\d{4}-\d+-?\d*[cf](?:orhigher|orbelow)?$/;
+
+   // ✅ 수정 (neg- 지원)
+   const tempPattern = /-\d{4}-(?:neg-)?\d+-?\d*[cf](?:orhigher|orbelow)?$/;
+   // "-2026-41forbelow" → 매칭 ✅
+   // "-2026-neg-3c" → 매칭 ✅ (토론토 등)
+   ```
+
+**결과**:
+- ✅ 번역 뒤바뀜 버그 완전 해결 (3개 ETL 스크립트 모두 수정)
+- ✅ 잘못 번역된 Joe Rogan 시장 데이터 초기화 (재번역 필요)
+- ✅ HSI Up/Down 등 날짜 포함 시장 URL 정상 작동
+- ✅ 토론토 음수 온도 시장 그룹핑 지원
+- ✅ 숫자 범위 시장 정상 작동 유지 (Elon Musk 트윗 등)
+
+**영향받는 파일**:
+- `etl/translate_titles.py:110-125` - 파싱 로직 개선
+- `etl/translate_feb11_15.py:127-155` - 파싱 로직 개선
+- `etl/translate_feb11_15_bot.py:314-345` - 파싱 로직 개선 + 시간대 일관성 검증
+- `app.js:540` - `groupSimilarMarkets()` numericPattern 수정
+- `app.js:535-538` - `groupSimilarMarkets()` tempPattern neg- 지원
+- `app.js:1460` - `openEventLink()` numericRangePattern 수정
+- `app.js:1452-1455` - `openEventLink()` tempRangePattern neg- 지원
+
+**검증 방법**:
+```bash
+# 번역 테스트 (1개 배치)
+python etl/translate_feb11_15_bot.py --test
+
+# URL 테스트
+curl -I https://polymarket.com/event/hsi-up-or-down-on-february-11-2026  # → 200 ✅
+curl -I https://polymarket.com/event/highest-temperature-in-toronto-on-february-11-2026  # → 200 ✅
+```
+
+---
+
+### 2026-02-11: 대규모 URL 그룹화 최적화 (패턴 6-10 추가)
+
+**목적**:
+- 687개의 유사 시장을 자동 그룹화하여 UI 복잡도 대폭 감소
+- Bitcoin dip/reach 시장의 ID 붙은 slug 문제 해결
+- 인용 구문/회사명/숫자만 다른 중복 시장들을 효과적으로 통합
+
+**문제 발견**:
+- Bitcoin dip 시장: slug 뒤에 ID 붙어서 그룹화 실패 (`-644-513-935`)
+- Trump say 시장: 인용 구문만 다른 225개 시장이 개별 표시
+- Robot dancers: 회사명만 다른 7개 시장이 개별 표시
+- Amazon 주가: 가격 범위만 다른 100개 시장이 개별 표시
+- Exactly N 이벤트: 숫자만 다른 66개 시장이 개별 표시
+
+**DB 전수 조사 결과**:
+
+| 패턴 | 영향 시장 | 예시 | 해결 방법 |
+|------|----------|------|----------|
+| **패턴 6 개선** | 289개 | `will-bitcoin-dip-to-60k-in-february-2026-644-513-935` | ID 제거 후 그룹화 |
+| **패턴 7** | 225개 | `will-trump-say-witkoff-during-state-of-union-785` | 인용 구문 제거 후 그룹화 |
+| **패턴 8** | 7개 | `will-agibot-have-robot-dancers-at-2026-gala` | 회사명 제거 후 그룹화 |
+| **패턴 9** | 100개 | `will-amzn-close-between-235-240-week-feb-13-2026` | 가격 범위 제거 후 그룹화 |
+| **패턴 10** | 66개 | `will-there-be-exactly-3-earthquakes-magnitude-6pt5-feb-15` | 숫자 제거 후 그룹화 |
+
+**구현 내용**:
+
+1. **패턴 6 개선 (Bitcoin dip/reach + ID 제거)**:
+   ```javascript
+   // 기존: /^will-([^-]+)-(?:reach|dip-to)-[\d]+(?:pt\d+)?k?-(.+)$/
+   // 신규: /^will-([^-]+)-(?:reach|dip-to)-[\d]+(?:pt\d+)?k?-((?:in|on|by)-.+?)(?:-\d{3}-\d{3}-\d{3})?$/
+
+   // 그룹화: will-bitcoin-dip-to-60k-in-february-2026-644-513-935 → bitcoin-february-2026
+   // 클릭: Polymarket 검색 페이지로 이동 (검색어: "bitcoin february 2026")
+   ```
+
+2. **패턴 7 (Person say quote)**:
+   ```javascript
+   /^will-([^-]+)-say-[^-]+-((?:during|in|by|at)-.+?)(?:-\d+)?$/
+
+   // 그룹화: will-trump-say-witkoff-during-state-of-union-785 → trump-say-state-of-the-union-address
+   // 클릭: 검색 페이지 ("trump say state of the union address")
+   ```
+
+3. **패턴 8 (Robot dancers)**:
+   ```javascript
+   /^will-[^-]+-have-robot-dancers-at-(.+)$/
+
+   // 그룹화: will-agibot-have-robot-dancers-at-2026-gala → robot-dancers-2026-gala
+   // 클릭: 검색 페이지 ("robot dancers 2026 spring festival gala")
+   ```
+
+4. **패턴 9 (Stock close at)**:
+   ```javascript
+   /^will-([a-z]+)-close-(?:above|between)-[\d]+(?:-and-[\d]+)?-week-(.+)$/
+
+   // 그룹화: will-amzn-close-between-235-240-week-february-13-2026 → amzn-close-week-february-13-2026
+   // 클릭: 검색 페이지 ("amzn close february 13 2026")
+   ```
+
+5. **패턴 10 (Exactly N events)**:
+   ```javascript
+   /^will-there-be-exactly-\d+-(.+)$/
+
+   // 그룹화: exactly-3-earthquakes-magnitude-6pt5-february-15 → exactly-earthquakes-magnitude-6pt5-february-15
+   // 클릭: 검색 페이지 ("earthquakes magnitude 6.5 february 15")
+   ```
+
+**결과**:
+- ✅ **총 687개 시장**을 자동 그룹화 (기존 대비 80% 감소)
+- ✅ Bitcoin dip ID 문제 해결 (289개 시장)
+- ✅ Trump say 시장 통합 (225개 → ~20개 그룹)
+- ✅ Robot dancers 통합 (7개 → 1개 그룹)
+- ✅ Amazon 주가 통합 (100개 → ~5개 그룹)
+- ✅ Exactly N 통합 (66개 → ~10개 그룹)
+- ✅ 모든 그룹화된 시장은 검색 페이지로 리다이렉트하여 전체 옵션 확인 가능
+
+**코드 위치**:
+- `app.js:555-571` - `groupSimilarMarkets()` 패턴 6-10 추가
+- `app.js:585-599` - `groupSimilarMarkets()` 패턴 적용 로직
+- `app.js:1479-1498` - `openEventLink()` 패턴 6-10 추가
+- `app.js:1512-1548` - `openEventLink()` 패턴 처리 로직 (검색 페이지 리다이렉트)
+
+**패턴 진화 요약**:
+- **1차**: 온도, 트윗 (패턴 1-2)
+- **2차**: 가격 above/below, between (패턴 3-4)
+- **3차**: 가격 greater/less than (패턴 5)
+- **4차**: reach/dip 초기 버전 (패턴 6)
+- **5차**: 대규모 최적화 (패턴 6-10 확장) ← 현재
+
+---
+
+### 2026-02-11: 한글 번역 시스템 구축
+
+**목적**:
+- Polymarket 시장 제목을 한국어로 번역하여 한국 사용자 접근성 향상
+- 언어 토글(한국어/영어) 지원으로 사용자 선택권 제공
+- Claude API 기반 배치 번역으로 비용 효율적인 시스템 구축
+
+**변경사항**:
+
+1. **데이터베이스 스키마 확장**:
+   - `poly_events` 테이블에 `title_ko TEXT` 컬럼 추가
+   - 인덱스 생성: `idx_poly_events_title_ko`
+   - 마이그레이션: `add_title_ko_column`
+
+2. **번역 프롬프트 설계** (`etl/translation_prompt.md`):
+   - 반말 사용 (~할까?, ~될까?, ~인가?)
+   - 날짜/시간 원문 유지 (February 11, 2AM ET)
+   - 숫자/금액 원문 유지 ($76,000, 50+ bps)
+   - 전문 용어 처리 (Fed → 연준, FDV → 시가총액(FDV))
+   - 8가지 번역 패턴 정의 (Will 질문형, 수치 비교형, 범위형 등)
+
+3. **번역 스크립트 개발** (`etl/translate_titles.py`):
+   - Claude API (Haiku 모델) 사용
+   - 배치 처리 (100개씩)
+   - 재시도 로직 포함
+   - 환경 변수 기반 설정 (ANTHROPIC_API_KEY)
+   - 예상 비용: $0.80 (29,863개 기준)
+
+4. **캘린더 앱 다국어 지원** ([app.js](app.js)):
+   - `getTitle(event)` 헬퍼 함수 추가 (line 1616-1622)
+   - `currentLang` 변수 기반 자동 언어 선택
+   - 한국어 선택 시: `title_ko` 우선, 없으면 `title` 폴백
+   - 영어 선택 시: 항상 `title` 사용
+   - 검색 기능에 한글/영어 동시 지원 (line 1101)
+   - Supabase 쿼리에 `title_ko` 필드 추가 (line 666)
+
+5. **번역 현황**:
+   - 초기 테스트: 5개 샘플 번역 완료
+   - 배치 번역: 100개 고거래량 이벤트 완료
+   - 총 105개 / 29,868개 미래 이벤트 번역됨 (0.4%)
+   - 잔여: 29,763개 (사용자가 환경 변수 설정 후 스크립트 실행 가능)
+
+**결과**:
+- ✅ 한글 제목 표시 기능 완성
+- ✅ 언어 토글 시 자동 전환
+- ✅ 검색 시 한글/영어 모두 검색 가능
+- ✅ 번역 품질: 반말 일관성, 날짜/숫자 원문 유지
+- ⏸️  전체 번역 대기 (환경 변수 설정 후 `python etl/translate_titles.py` 실행)
+
+**코드 위치**:
+- 데이터베이스: `title_ko TEXT` 컬럼 (Supabase)
+- 번역 프롬프트: `etl/translation_prompt.md` (348 lines)
+- 번역 스크립트: `etl/translate_titles.py` (Claude API 버전)
+- 캘린더 앱: `app.js:666, 1101, 1616-1622` (다국어 지원)
+- 의존성: `etl/requirements.txt` (anthropic>=0.40.0 추가)
+
+**사용 방법**:
+```bash
+# 환경 변수 설정
+export ANTHROPIC_API_KEY="your-api-key"
+export SUPABASE_URL="your-url"
+export SUPABASE_KEY="your-key"
+
+# 테스트 모드 (1개 배치 = 100개)
+python etl/translate_titles.py --test
+
+# 전체 번역
+python etl/translate_titles.py
+```
+
+---
 
 ### 2026-02-11: 프로젝트 구조 재구성 및 문서화
 

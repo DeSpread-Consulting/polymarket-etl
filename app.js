@@ -449,7 +449,7 @@ function showEventTooltip(event, eventData) {
     // Build tooltip HTML
     const t = translations[currentLang];
     tooltipElement.innerHTML = `
-        <div class="tooltip-title">${escapeHtml(eventData.title)}</div>
+        <div class="tooltip-title">${escapeHtml(getTitle(eventData))}</div>
         <div class="tooltip-stats">
             <div class="tooltip-stat">
                 <span class="tooltip-stat-label">${t.probability || 'Probability'}:</span>
@@ -523,54 +523,24 @@ function positionTooltip(event) {
     tooltipElement.style.top = y + 'px';
 }
 
-// 🎯 그룹화된 시장 통합 (예: Elon Musk 트윗 37개 옵션 → 1개 카드)
+// 🎯 그룹화된 시장 통합 (image_url + end_date 기반)
+// Polymarket에서 같은 이벤트 그룹은 동일한 image_url을 공유하므로
+// 이를 활용하여 자동으로 모든 유형의 시장을 그룹핑합니다.
 function groupSimilarMarkets(events) {
     const groups = new Map();
 
     events.forEach(event => {
-        // slug 정규화 (openEventLink와 동일한 로직)
-        let normalized = event.slug;
+        let groupKey;
 
-        // 패턴 1: 온도 시장 (연도-온도값[단위][옵션])
-        const tempPattern = /-\d{4}-\d+-?\d*[cf](?:orhigher|orbelow)?$/;
-
-        // 패턴 2: 숫자 범위 시장 (날짜-숫자범위)
-        const numericPattern = /-\d+-\d+$/;
-
-        // 패턴 2-1: 플러스 패턴 (예: 580+, 140+)
-        const plusPattern = /-\d+plus$/;
-
-        // 패턴 3: 가격 above/below
-        const priceAboveBelow = /-(above|below)-[\d]+(?:pt\d+)?k?-on-/;
-
-        // 패턴 4: 가격 between (소수점 지원)
-        const priceBetween = /-be-between-[\d]+(?:pt\d+)?-[\d]+(?:pt\d+)?-on-/;
-
-        // 패턴 5: greater than / less than (openEventLink와 동일, 소수점 지원)
-        const greaterLessThan = /^will-the-price-of-([^-]+)-be-(?:greater-than|less-than)-[\d]+(?:pt\d+)?-on-(.+)$/;
-
-        if (tempPattern.test(normalized)) {
-            // 온도 범위 부분 제거
-            normalized = normalized.replace(tempPattern, '');
-        } else if (priceAboveBelow.test(normalized)) {
-            // 가격 above/below: 가격 숫자 제거
-            normalized = normalized.replace(/-(above|below)-[\d]+(?:pt\d+)?k?-on-/, '-$1-on-');
-        } else if (priceBetween.test(normalized)) {
-            // 가격 between: 전체 구조 변경 (소수점 지원)
-            normalized = normalized.replace(/will-the-price-of-([^-]+)-be-between-[\d]+(?:pt\d+)?-[\d]+(?:pt\d+)?-on-(.+)/, '$1-price-on-$2');
-        } else if (greaterLessThan.test(normalized)) {
-            // 🆕 패턴 5: greater/less than 변환
-            normalized = normalized.replace(greaterLessThan, '$1-price-on-$2');
-        } else if (plusPattern.test(normalized)) {
-            // 플러스 패턴 제거 (예: -580plus → '')
-            normalized = normalized.replace(plusPattern, '');
-        } else if (numericPattern.test(normalized) && !/-15m-\d+$/.test(normalized)) {
-            // 숫자 범위 부분 제거 (타임스탬프 제외)
-            normalized = normalized.replace(numericPattern, '');
+        if (event.image_url) {
+            // 🎯 핵심: image_url + end_date로 그룹화
+            // 같은 이미지 = 같은 이벤트 그룹 (Polymarket 규칙)
+            // end_date도 포함하여 다른 날짜의 시장은 별도 표시
+            groupKey = `${event.image_url}|${event.end_date}`;
+        } else {
+            // image_url이 없는 경우 개별 이벤트로 처리
+            groupKey = `no-image-${event.id}`;
         }
-
-        // 그룹 키 = 정규화된 slug + 종료 시간
-        const groupKey = `${normalized}|${event.end_date}`;
 
         if (!groups.has(groupKey)) {
             groups.set(groupKey, []);
@@ -578,7 +548,7 @@ function groupSimilarMarkets(events) {
         groups.get(groupKey).push(event);
     });
 
-    // 각 그룹에서 가장 높은 확률을 가진 이벤트만 선택
+    // 각 그룹에서 대표 이벤트 선택
     const deduplicated = [];
     let groupedCount = 0;
 
@@ -587,14 +557,22 @@ function groupSimilarMarkets(events) {
             // 단일 시장 → 그대로 표시
             deduplicated.push(group[0]);
         } else {
-            // 그룹화된 시장 → Yes 확률이 가장 높은 옵션만 표시
+            // 그룹화된 시장 → Yes 확률이 가장 높은 옵션을 대표로 선택
             groupedCount++;
+
+            // 총 거래량 합산 (그룹 전체 규모 표시용)
+            const totalVolume = group.reduce((sum, e) => sum + parseFloat(e.volume || 0), 0);
+
             const best = group.reduce((best, curr) => {
-                // probs[0] = Yes 확률, probs[1] = No 확률
                 const bestYesProb = parseFloat(best.probs[0]);
                 const currYesProb = parseFloat(curr.probs[0]);
                 return currYesProb > bestYesProb ? curr : best;
             });
+
+            // 총 거래량 저장 (UI 표시용)
+            best._totalVolume = totalVolume;
+            best._groupSize = group.length;
+
             deduplicated.push(best);
         }
     });
@@ -663,7 +641,7 @@ async function loadData() {
             const { data, error } = await supabaseClient
                 .from('poly_events')
                 // 🚀 개선 2: 필요한 필드만 선택 (전송량 60% 감소)
-                .select('id, title, slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
+                .select('id, title, title_ko, slug, event_slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
                 .gte('end_date', now)  // 현재 이후
                 .lte('end_date', maxDate)  // 5일 이내
                 .gte('volume', 1000)  // 서버 레벨 필터링 (거래량 $1K 이상, 암호화폐 포함)
@@ -769,7 +747,7 @@ async function loadMoreData(targetDate) {
 
         const { data, error } = await supabaseClient
             .from('poly_events')
-            .select('id, title, slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
+            .select('id, title, slug, event_slug, end_date, volume, volume_24hr, probs, category, closed, image_url, tags')
             .gte('end_date', startDate)
             .lte('end_date', targetDate)
             .gte('volume', 1000)  // $1K 이상 (암호화폐 포함)
@@ -1099,6 +1077,7 @@ function getFilteredEvents(searchQuery = '') {
         const query = searchQuery.toLowerCase();
         filtered = filtered.filter(e =>
             e.title?.toLowerCase().includes(query) ||
+            e.title_ko?.toLowerCase().includes(query) ||
             e.category?.toLowerCase().includes(query)
         );
     }
@@ -1209,6 +1188,7 @@ function renderWeekEventCard(container, event) {
     const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
     const volume = formatCurrency(event.volume);
     const slugSafe = escapeHtml(event.slug || '');
+    const eventSlugSafe = escapeHtml(event.event_slug || '');
     const category = inferCategory(event);
     const categoryColor = categoryColors[category] || categoryColors['default'];
 
@@ -1216,7 +1196,7 @@ function renderWeekEventCard(container, event) {
     eventEl.className = 'week-event';
     eventEl.style.borderLeftColor = categoryColor;
     eventEl.setAttribute('data-category', category);
-    eventEl.onclick = () => openEventLink(slugSafe, '');
+    eventEl.onclick = () => openEventLink(slugSafe, '', eventSlugSafe);
 
     eventEl.addEventListener('mouseenter', (e) => showEventTooltip(e, event));
     eventEl.addEventListener('mousemove', (e) => positionTooltip(e));
@@ -1227,7 +1207,7 @@ function renderWeekEventCard(container, event) {
         <div class="week-event-content">
             <div class="week-event-header">
                 <img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
-                <span class="week-event-title">${event.title}</span>
+                <span class="week-event-title">${getTitle(event)}</span>
                 <button class="event-link-btn" onclick="event.stopPropagation(); window.open('https://polymarket.com/event/${slugSafe}', '_blank');" title="Open in Polymarket">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -1336,8 +1316,9 @@ function renderOverviewEventItem(container, event) {
     const imageUrl = event.image_url || '';
     const prob = getMainProb(event);
     const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
-    const title = truncate(event.title, 25);
+    const title = truncate(getTitle(event), 25);
     const slugSafe = escapeHtml(event.slug || '');
+    const eventSlugSafe = escapeHtml(event.event_slug || '');
     const category = inferCategory(event);
     const categoryColor = categoryColors[category] || categoryColors['default'];
 
@@ -1345,7 +1326,7 @@ function renderOverviewEventItem(container, event) {
     eventEl.className = 'calendar-overview-event';
     eventEl.dataset.category = category;
     eventEl.style.borderLeftColor = categoryColor;
-    eventEl.onclick = (e) => { e.stopPropagation(); openEventLink(slugSafe, ''); };
+    eventEl.onclick = (e) => { e.stopPropagation(); openEventLink(slugSafe, '', eventSlugSafe); };
 
     eventEl.addEventListener('mouseenter', (e) => showEventTooltip(e, event));
     eventEl.addEventListener('mousemove', (e) => positionTooltip(e));
@@ -1398,27 +1379,30 @@ function highlightSearchTerm(text, searchTerm) {
     return escapedText.replace(regex, '<span class="search-highlight">$1</span>');
 }
 
-function openEventLink(slug, searchQuery) {
+function openEventLink(slug, searchQuery, eventSlug) {
     if (searchQuery) {
         // 그룹화된 이벤트는 검색 페이지로 이동
         const encoded = encodeURIComponent(searchQuery);
         window.open(`https://polymarket.com/markets?_q=${encoded}`, '_blank');
+    } else if (eventSlug) {
+        // ✅ event_slug가 있으면 바로 사용 (가장 정확한 URL)
+        // API의 events[0].slug로, 그룹 이벤트 페이지 URL과 정확히 일치
+        window.open(`https://polymarket.com/event/${eventSlug}`, '_blank');
     } else if (slug) {
-        // 그룹 이벤트의 개별 옵션이 slug에 포함된 경우 정규화
-        // 예1: "highest-temperature-in-seattle-on-february-10-2026-41forbelow"
-        //   → "highest-temperature-in-seattle-on-february-10-2026"
-        // 예2: "elon-musk-of-tweets-february-3-february-10-380-399"
-        //   → "elon-musk-of-tweets-february-3-february-10"
+        // ⚠️ event_slug가 없는 경우 기존 패턴 기반 정규화로 폴백
         let normalizedSlug = slug;
 
         // 패턴 1: 온도 시장 (연도-온도값[단위][옵션])
-        // Fahrenheit: -2026-41forbelow, -2026-42-43f, -2026-52forhigher
-        // Celsius: -2026-0c, -2026-1c, -2026-14corhigher, -2026-35corbelow
-        const tempRangePattern = /-(\d{4})-\d+-?\d*[cf](?:orhigher|orbelow)?$/;
+        // Fahrenheit 양수: -2026-41forbelow, -2026-42-43f, -2026-52forhigher
+        // Celsius 양수: -2026-0c, -2026-1c, -2026-14corhigher, -2026-35corbelow
+        // Celsius 음수: -2026-neg-3c, -2026-neg-4corbelow (토론토 등)
+        const tempRangePattern = /-(\d{4})-(?:neg-)?\d+-?\d*[cf](?:orhigher|orbelow)?$/;
 
         // 패턴 2: 숫자 범위 시장 (날짜-숫자범위)
+        // ⚠️ 날짜 패턴 제외: -11-2026 (일-연도) vs -380-399 (트윗 수)
+        // → 3자리 이상 숫자만 매칭하여 날짜 보호
         // 예: -february-10-380-399, -december-16-260-279
-        const numericRangePattern = /-(\d+-\d+)$/;
+        const numericRangePattern = /-(\d{3,}-\d{2,})$/;
 
         // 패턴 2-1: 플러스 패턴 (예: 580+, 140+)
         // 예: elon-musk-of-tweets-february-6-february-13-580plus
@@ -1439,6 +1423,27 @@ function openEventLink(slug, searchQuery) {
         // 소수점 지원: xrp-greater-than-1pt70 (XRP $1.70)
         const greaterLessThanPattern = /^will-the-price-of-([^-]+)-be-(?:greater-than|less-than)-[\d]+(?:pt\d+)?-on-(.+)$/;
 
+        // 패턴 6: reach / dip to (ID 제거 버전, 검색 페이지용)
+        // 예1: will-ethereum-reach-2800-february-9-15 → 검색: "Ethereum February 9-15"
+        // 예2: will-bitcoin-dip-to-60k-in-february-2026-644-513-935 → 검색: "Bitcoin February 2026"
+        const reachDipPattern = /^will-([^-]+)-(?:reach|dip-to)-[\d]+(?:pt\d+)?k?-((?:in|on|by)-.+?)(?:-\d{3}-\d{3}-\d{3})?$/;
+
+        // 패턴 7: Trump say "this week" (그룹 페이지로 직접 이동)
+        // 예: will-trump-say-olympics-this-week-february-15 → what-will-trump-say-this-week-february-15
+        const trumpSayThisWeekPattern = /^will-trump-say-.+-this-week-(.+)$/;
+
+        // 패턴 8: Robot dancers (검색 페이지용)
+        // 예: will-agibot-have-robot-dancers-at-the-2026-spring-festival-gala → 검색: "Robot dancers 2026 Spring Festival Gala"
+        const robotDancersPattern = /^will-[^-]+-have-robot-dancers-at-(.+)$/;
+
+        // 패턴 9: Stock close at (검색 페이지용)
+        // 예: will-amzn-close-between-235-and-240-week-february-13-2026 → 검색: "AMZN close February 13 2026"
+        const stockClosePattern = /^will-([a-z]+)-close-(?:above|between)-[\d]+(?:-and-[\d]+)?-week-(.+)$/;
+
+        // 패턴 10: Exactly N [event] (검색 페이지용)
+        // 예: will-there-be-exactly-3-earthquakes-of-magnitude-6pt5-or-higher-worldwide-by-february-15 → 검색: "Earthquakes magnitude 6.5 February 15"
+        const exactlyNumberPattern = /^will-there-be-exactly-\d+-(.+)$/;
+
         if (tempRangePattern.test(slug)) {
             // 온도 범위 부분 제거 (연도까지만 유지)
             normalizedSlug = slug.replace(tempRangePattern, '-$1');
@@ -1451,6 +1456,42 @@ function openEventLink(slug, searchQuery) {
         } else if (greaterLessThanPattern.test(slug)) {
             // 🆕 패턴 5: greater/less than 변환
             normalizedSlug = slug.replace(greaterLessThanPattern, '$1-price-on-$2');
+        } else if (reachDipPattern.test(slug)) {
+            // 🆕 패턴 6: reach/dip → 검색 페이지로 리다이렉트
+            const match = slug.match(reachDipPattern);
+            const subject = match[1]; // ethereum, bitcoin 등
+            const period = match[2]; // february-9-15, in-february-2026 등
+
+            // 검색어 생성: "Ethereum February 9-15"
+            const searchQuery = `${subject} ${period.replace(/-/g, ' ')}`;
+            window.open(`https://polymarket.com/markets?_q=${encodeURIComponent(searchQuery)}`, '_blank');
+            return; // 검색 페이지로 이동했으므로 더 이상 처리 안 함
+        } else if (trumpSayThisWeekPattern.test(slug)) {
+            // 패턴 7: Trump say "this week" → 그룹 페이지로 직접 이동
+            normalizedSlug = slug.replace(trumpSayThisWeekPattern, 'what-will-trump-say-this-week-$1');
+            // 정규화된 slug로 계속 진행 (아래 단일 마켓 링크 생성)
+        } else if (robotDancersPattern.test(slug)) {
+            // 패턴 8: Robot dancers → 검색 페이지
+            const match = slug.match(robotDancersPattern);
+            const event = match[1]; // 2026-spring-festival-gala 등
+            const searchQuery = `robot dancers ${event.replace(/-/g, ' ')}`;
+            window.open(`https://polymarket.com/markets?_q=${encodeURIComponent(searchQuery)}`, '_blank');
+            return;
+        } else if (stockClosePattern.test(slug)) {
+            // 패턴 9: Stock close → 검색 페이지
+            const match = slug.match(stockClosePattern);
+            const ticker = match[1]; // amzn, tsla 등
+            const period = match[2]; // february-13-2026 등
+            const searchQuery = `${ticker} close ${period.replace(/-/g, ' ')}`;
+            window.open(`https://polymarket.com/markets?_q=${encodeURIComponent(searchQuery)}`, '_blank');
+            return;
+        } else if (exactlyNumberPattern.test(slug)) {
+            // 패턴 10: Exactly N → 검색 페이지
+            const match = slug.match(exactlyNumberPattern);
+            const event = match[1]; // earthquakes-of-magnitude-6pt5-or-higher-worldwide-by-february-15 등
+            const searchQuery = event.replace(/-/g, ' ').replace(/pt/g, '.');
+            window.open(`https://polymarket.com/markets?_q=${encodeURIComponent(searchQuery)}`, '_blank');
+            return;
         } else if (plusPattern.test(slug)) {
             // 플러스 패턴 제거 (예: -580plus → '')
             normalizedSlug = slug.replace(plusPattern, '');
@@ -1499,16 +1540,18 @@ function renderModalEventItem(container, event) {
     const prob = getMainProb(event);
     const probClass = prob < 30 ? 'low' : prob < 70 ? 'mid' : '';
     const slugSafe = escapeHtml(event.slug || '');
+    const eventSlugSafe = escapeHtml(event.event_slug || '');
+    const hasLink = slugSafe || eventSlugSafe;
 
     const eventEl = document.createElement('div');
-    eventEl.className = `modal-event-item${!slugSafe ? ' disabled' : ''}`;
-    if (slugSafe) {
-        eventEl.onclick = () => openEventLink(event.slug, '');
+    eventEl.className = `modal-event-item${!hasLink ? ' disabled' : ''}`;
+    if (hasLink) {
+        eventEl.onclick = () => openEventLink(slugSafe, '', eventSlugSafe);
     }
     eventEl.innerHTML = `
         <img src="${imageUrl}" class="modal-event-image" alt="" onerror="this.style.display='none'">
         <div class="modal-event-content">
-            <div class="modal-event-title">${event.title}</div>
+            <div class="modal-event-title">${getTitle(event)}</div>
             <div class="modal-event-category">${event.category || 'Uncategorized'}</div>
         </div>
         <span class="modal-event-prob ${probClass}">${prob}%</span>
@@ -1611,6 +1654,16 @@ const translations = {
 };
 
 let currentLang = localStorage.getItem('language') || 'ko';
+
+// 🌐 제목 언어 선택 헬퍼 함수
+function getTitle(event) {
+    // 한국어 선택 시: title_ko가 있으면 한글, 없으면 영어
+    // 영어 선택 시: 항상 영어
+    if (currentLang === 'ko' && event.title_ko) {
+        return event.title_ko;
+    }
+    return event.title;
+}
 
 function translatePage() {
     const t = translations[currentLang];
