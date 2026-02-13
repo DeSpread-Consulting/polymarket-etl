@@ -2,7 +2,7 @@
 
 Polymarket 예측 시장을 캘린더 형식으로 시각화하는 웹 애플리케이션입니다.
 
-> **최신 업데이트 (2026-02-11)**: 번역 시스템 안정성 개선, URL 생성 버그 수정, 음수 온도 시장 지원 추가
+> **최신 업데이트 (2026-02-12)**: 번역 품질 개선 (후처리 파이프라인, 번역 캐시, 문화 맥락 보정), 번역 스크립트 통합
 
 ---
 
@@ -82,17 +82,24 @@ npx http-server -p 8000
 ```
 polymarket-etl/
 ├── index.html              # 메인 HTML
-├── app.js                  # 캘린더 로직 (1,450+ lines)
-├── style.css               # 스타일 (1,000+ lines)
+├── app.js                  # 캘린더 로직 (1,750+ lines)
+├── style.css               # 스타일 (1,770+ lines)
 ├── config.js               # Supabase 설정 (gitignored)
 ├── config.js.example       # 설정 템플릿
+├── .env.example            # 환경 변수 템플릿
 ├── .vercel/                # Vercel 배포 설정
-├── etl/                    # 데이터 파이프라인 (백그라운드)
-│   ├── main.py             # ETL 메인 스크립트
+├── etl/                    # 데이터 파이프라인 + 번역
+│   ├── main.py             # ETL 메인 스크립트 (Polymarket API 동기화)
+│   ├── translate.py        # 한글 번역 통합 스크립트 (OpenAI)
+│   ├── postprocess.py      # 번역 후처리 모듈
+│   ├── translation_prompt.md  # 번역 프롬프트 규칙
 │   ├── requirements.txt    # Python 의존성
 │   ├── schema.sql          # DB 스키마
+│   ├── migration.sql       # 마이그레이션
 │   └── README.md           # ETL 문서
+├── docs/plans/             # 설계 문서
 ├── .github/workflows/      # GitHub Actions (자동 동기화)
+├── CHANGELOG.md            # 변경 이력
 ├── AGENT_GUIDELINES.md     # AI 에이전트 작업 지침
 └── SYSTEM_OVERVIEW.md      # 시스템 아키텍처 문서
 ```
@@ -105,8 +112,10 @@ polymarket-etl/
 
 ```
 Polymarket API
-    ↓ (4시간마다 자동 동기화)
+    ↓ (4시간마다 자동 동기화 - etl/main.py)
 Supabase: poly_events 테이블
+    ↓ (한글 번역 - etl/translate.py + OpenAI)
+title_ko 컬럼 업데이트 (후처리 + 캐시)
     ↓ (웹 앱 로드)
 app.js: 필터링 + 렌더링
     ↓ (사용자 인터랙션)
@@ -117,6 +126,7 @@ Week View + Calendar Overview
 
 - **프론트엔드**: Vanilla JavaScript (ES6+)
 - **데이터베이스**: Supabase (PostgreSQL)
+- **번역**: OpenAI gpt-4o-mini + 후처리 파이프라인
 - **배포**: Vercel
 - **데이터 동기화**: Python + GitHub Actions
 
@@ -211,8 +221,10 @@ Polymarket의 그룹 이벤트 처리:
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `id` | text | 시장 고유 ID (PK) |
-| `title` | text | 시장 제목 |
+| `title` | text | 시장 제목 (영문) |
+| `title_ko` | text | 시장 제목 (한글 번역) |
 | `slug` | text | URL slug |
+| `event_slug` | text | 이벤트 슬러그 |
 | `end_date` | timestamptz | 종료 시간 (UTC) |
 | `volume` | numeric | 총 거래량 ($) |
 | `volume_24hr` | numeric | 24시간 거래량 ($) |
@@ -220,7 +232,12 @@ Polymarket의 그룹 이벤트 처리:
 | `outcomes` | jsonb | 결과 옵션 |
 | `category` | text | 카테고리 |
 | `tags` | text[] | 태그 배열 |
+| `market_group` | text | 시장 그룹 |
+| `image_url` | text | 이미지 URL |
 | `closed` | boolean | 정산 완료 여부 |
+| `api_created_at` | timestamptz | API 생성일 |
+| `created_at` | timestamptz | DB 생성일 |
+| `updated_at` | timestamptz | DB 수정일 |
 
 ### 데이터 동기화
 
