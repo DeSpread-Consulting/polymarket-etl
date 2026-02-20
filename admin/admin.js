@@ -263,9 +263,10 @@ async function loadData() {
             query = query.eq('hidden', true);
         }
 
-        // 텍스트 검색 (ilike)
+        // 텍스트 검색 (ilike) — 특수문자 이스케이프
         if (searchQuery) {
-            query = query.or(`title.ilike.%${searchQuery}%,title_ko.ilike.%${searchQuery}%`);
+            const safeQ = searchQuery.replace(/[%_\\]/g, c => '\\' + c);
+            query = query.or(`title.ilike.%${safeQ}%,title_ko.ilike.%${safeQ}%`);
         }
 
         // 정렬
@@ -312,12 +313,13 @@ function renderTable() {
         const hasTranslation = !!event.title_ko;
         const volume = formatVolume(event.volume);
         const endDate = formatDate(event.end_date);
+        const safeId = escapeHtml(event.id);
 
         return `
             <tr class="${isHidden ? 'row-hidden' : ''}">
                 <td class="col-toggle" style="text-align:center;">
                     <label class="toggle-switch">
-                        <input type="checkbox" ${!isHidden ? 'checked' : ''} onchange="toggleHidden('${event.id}', !this.checked)">
+                        <input type="checkbox" ${!isHidden ? 'checked' : ''} data-event-id="${safeId}" data-action="toggle-hidden">
                         <span class="toggle-slider"></span>
                     </label>
                 </td>
@@ -329,11 +331,23 @@ function renderTable() {
                 <td class="volume-cell">${volume}</td>
                 <td style="font-size:0.8rem;color:var(--text-secondary);">${endDate}</td>
                 <td style="text-align:center;">
-                    <button class="btn-edit" onclick="openEditModal('${event.id}')">편집</button>
+                    <button class="btn-edit" data-event-id="${safeId}" data-action="edit">편집</button>
                 </td>
             </tr>
         `;
     }).join('');
+
+    // 이벤트 위임 (XSS 방지: onclick 인라인 대신 data 속성 사용)
+    tbody.querySelectorAll('[data-action="toggle-hidden"]').forEach(input => {
+        input.addEventListener('change', function() {
+            toggleHidden(this.dataset.eventId, !this.checked);
+        });
+    });
+    tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            openEditModal(this.dataset.eventId);
+        });
+    });
 }
 
 function renderPagination() {
@@ -348,32 +362,39 @@ function renderPagination() {
     let html = '';
 
     // Prev
-    html += `<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>&laquo;</button>`;
+    html += `<button class="page-btn" data-page="${currentPage - 1}" ${currentPage <= 1 ? 'disabled' : ''}>&laquo;</button>`;
 
     // Page numbers
     const start = Math.max(1, currentPage - 2);
     const end = Math.min(totalPages, currentPage + 2);
 
     if (start > 1) {
-        html += `<button class="page-btn" onclick="goToPage(1)">1</button>`;
+        html += `<button class="page-btn" data-page="1">1</button>`;
         if (start > 2) html += `<span class="page-info">...</span>`;
     }
 
     for (let i = start; i <= end; i++) {
-        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+        html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`;
     }
 
     if (end < totalPages) {
         if (end < totalPages - 1) html += `<span class="page-info">...</span>`;
-        html += `<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+        html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
     }
 
     // Next
-    html += `<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>&raquo;</button>`;
+    html += `<button class="page-btn" data-page="${currentPage + 1}" ${currentPage >= totalPages ? 'disabled' : ''}>&raquo;</button>`;
 
     html += `<span class="page-info">${totalCount.toLocaleString()}개 시장</span>`;
 
     el.innerHTML = html;
+
+    // 이벤트 위임 (XSS 방지: onclick 인라인 대신 data 속성 사용)
+    el.querySelectorAll('.page-btn[data-page]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            goToPage(parseInt(this.dataset.page, 10));
+        });
+    });
 }
 
 // ─── 액션 ───
@@ -552,7 +573,5 @@ async function bumpCacheVersion() {
     }
 }
 
-// 전역 함수 노출 (onclick에서 사용)
-window.toggleHidden = toggleHidden;
-window.openEditModal = openEditModal;
-window.goToPage = goToPage;
+// 모든 이벤트 핸들러는 data 속성 + 이벤트 위임 방식으로 바인딩됨
+// 전역 함수 노출 불필요

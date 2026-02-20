@@ -478,7 +478,7 @@ function showEventTooltip(event, eventData) {
         </div>
         <div class="tooltip-category">
             <span class="tooltip-category-dot" style="background-color: ${categoryColor};"></span>
-            ${category}
+            ${escapeHtml(category)}
         </div>
     `;
 
@@ -1236,10 +1236,11 @@ function renderWeekEventCard(container, event) {
     eventEl.addEventListener('mouseleave', hideEventTooltip);
 
     // Admin 컨트롤 (admin-mode일 때만 CSS로 표시)
+    const safeEventId = escapeHtml(event.id);
     const adminControls = `
         <div class="admin-event-controls">
-            <button class="admin-ctrl-btn" onclick="event.stopPropagation(); v2OpenEditModal('${event.id}');" title="편집">&#9998;</button>
-            <button class="admin-ctrl-btn hide-btn" onclick="event.stopPropagation(); v2ToggleHidden('${event.id}');" title="${event.hidden ? '노출' : '숨김'}">${event.hidden ? '&#9711;' : '&#10005;'}</button>
+            <button class="admin-ctrl-btn" data-admin-action="edit" data-event-id="${safeEventId}" title="편집">&#9998;</button>
+            <button class="admin-ctrl-btn hide-btn" data-admin-action="toggle-hidden" data-event-id="${safeEventId}" title="${event.hidden ? '노출' : '숨김'}">${event.hidden ? '&#9711;' : '&#10005;'}</button>
         </div>
     `;
 
@@ -1249,8 +1250,8 @@ function renderWeekEventCard(container, event) {
         <div class="week-event-content">
             <div class="week-event-header">
                 <img src="${imageUrl}" class="week-event-image" alt="" onerror="this.style.display='none'">
-                <span class="week-event-title">${getTitle(event)}</span>
-                <button class="event-link-btn" onclick="event.stopPropagation(); window.open('https://polymarket.com/event/${slugSafe}', '_blank');" title="Open in Polymarket">
+                <span class="week-event-title">${escapeHtml(getTitle(event))}</span>
+                <button class="event-link-btn" data-polymarket-slug="${slugSafe}" title="Open in Polymarket">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                         <polyline points="15 3 21 3 21 9"></polyline>
@@ -1264,6 +1265,25 @@ function renderWeekEventCard(container, event) {
             </div>
         </div>
     `;
+
+    // 이벤트 위임: Polymarket 링크 버튼
+    const linkBtn = eventEl.querySelector('.event-link-btn[data-polymarket-slug]');
+    if (linkBtn) {
+        linkBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.open('https://polymarket.com/event/' + linkBtn.dataset.polymarketSlug, '_blank');
+        });
+    }
+
+    // 이벤트 위임: Admin 컨트롤
+    eventEl.querySelectorAll('[data-admin-action]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.eventId;
+            if (btn.dataset.adminAction === 'edit') v2OpenEditModal(id);
+            else if (btn.dataset.adminAction === 'toggle-hidden') v2ToggleHidden(id);
+        });
+    });
 
     container.appendChild(eventEl);
 }
@@ -1338,10 +1358,18 @@ function renderCalendarOverview(searchQuery = '') {
             ${monthLabel}
             <div class="calendar-overview-day-number">${dayNumber}</div>
             ${topEvents.length > 0 ? '<div class="calendar-overview-events"></div>' : ''}
-            ${dayEvents.length > 3 ? `<div class="calendar-overview-more-link" onclick="showDayEvents('${dateKey}')">+${dayEvents.length - 3} ${translations[currentLang].more}</div>` : ''}
+            ${dayEvents.length > 3 ? `<div class="calendar-overview-more-link" data-date-key="${escapeHtml(dateKey)}">+${dayEvents.length - 3} ${translations[currentLang].more}</div>` : ''}
         `;
 
         daysContainer.appendChild(dayEl);
+
+        // more 링크 이벤트 바인딩
+        const moreLink = dayEl.querySelector('.calendar-overview-more-link[data-date-key]');
+        if (moreLink) {
+            moreLink.addEventListener('click', () => {
+                showDayEvents(moreLink.dataset.dateKey);
+            });
+        }
 
         // 이벤트 렌더링
         if (topEvents.length > 0) {
@@ -1376,19 +1404,30 @@ function renderOverviewEventItem(container, event) {
     eventEl.addEventListener('mouseleave', hideEventTooltip);
 
     // Admin 컨트롤 (admin-mode일 때만 CSS로 표시)
+    const safeEventId = escapeHtml(event.id);
     const adminHtml = `
         <div class="admin-event-controls overview-admin-controls">
-            <button class="admin-ctrl-btn" onclick="event.stopPropagation(); v2OpenEditModal('${event.id}');" title="편집">&#9998;</button>
-            <button class="admin-ctrl-btn hide-btn" onclick="event.stopPropagation(); v2ToggleHidden('${event.id}');" title="${event.hidden ? '노출' : '숨김'}">${event.hidden ? '&#9711;' : '&#10005;'}</button>
+            <button class="admin-ctrl-btn" data-admin-action="edit" data-event-id="${safeEventId}" title="편집">&#9998;</button>
+            <button class="admin-ctrl-btn hide-btn" data-admin-action="toggle-hidden" data-event-id="${safeEventId}" title="${event.hidden ? '노출' : '숨김'}">${event.hidden ? '&#9711;' : '&#10005;'}</button>
         </div>
     `;
 
     eventEl.innerHTML = `
         ${adminHtml}
         <img src="${imageUrl}" class="overview-event-image" alt="" onerror="this.style.display='none'">
-        <span class="overview-event-title">${title}</span>
+        <span class="overview-event-title">${escapeHtml(title)}</span>
         <span class="overview-event-prob ${probClass}">${prob}%</span>
     `;
+
+    // 이벤트 위임: Admin 컨트롤
+    eventEl.querySelectorAll('[data-admin-action]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.eventId;
+            if (btn.dataset.adminAction === 'edit') v2OpenEditModal(id);
+            else if (btn.dataset.adminAction === 'toggle-hidden') v2ToggleHidden(id);
+        });
+    });
 
     container.appendChild(eventEl);
 }
@@ -1603,8 +1642,8 @@ function renderModalEventItem(container, event) {
     eventEl.innerHTML = `
         <img src="${imageUrl}" class="modal-event-image" alt="" onerror="this.style.display='none'">
         <div class="modal-event-content">
-            <div class="modal-event-title">${getTitle(event)}</div>
-            <div class="modal-event-category">${event.category || 'Uncategorized'}</div>
+            <div class="modal-event-title">${escapeHtml(getTitle(event))}</div>
+            <div class="modal-event-category">${escapeHtml(event.category || 'Uncategorized')}</div>
         </div>
         <span class="modal-event-prob ${probClass}">${prob}%</span>
     `;
@@ -1615,8 +1654,7 @@ function closeModal() {
     document.getElementById('modalOverlay').classList.remove('active');
 }
 
-// Global functions for onclick handlers
-window.openEventLink = openEventLink;
+// 모든 이벤트 핸들러는 addEventListener로 바인딩됨
 
 // ============================================================================
 // Language Toggle (한국어/English)
@@ -1868,7 +1906,7 @@ function getTranslatedCategory(category) {
 window.getCurrentLang = () => currentLang;
 window.getTranslation = (key) => translations[currentLang][key] || key;
 window.getTranslatedCategory = getTranslatedCategory;
-window.showDayEvents = showDayEvents;
+// showDayEvents는 data-date-key 이벤트 위임으로 호출됨
 
 
 // ═══════════════════════════════════════════════════════
@@ -2201,6 +2239,4 @@ function v2ShowToast(message, type = 'success') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// 전역 노출
-window.v2OpenEditModal = v2OpenEditModal;
-window.v2ToggleHidden = v2ToggleHidden;
+// v2 admin 컨트롤은 data-admin-action 이벤트 위임으로 호출됨
